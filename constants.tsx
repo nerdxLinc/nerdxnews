@@ -1,4 +1,6 @@
+export const LOGO_URL = '/logo.jpg';
 import { Post } from './types';
+
 
 export const INITIAL_POSTS: Post[] = [
   {
