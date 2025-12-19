@@ -87,6 +87,17 @@ const App: React.FC = () => {
     setEditingPost(undefined);
   };
 
+  const handleMakeFeatured = (targetPost: Post) => {
+    setPosts(prev => prev.map(p => ({
+      ...p,
+      isFeatured: p.id === targetPost.id
+    })));
+    // Scroll to top so the user can see the new Hero section immediately
+    if (typeof window !== 'undefined') {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
+
   const handlePostClick = (post: Post) => {
     setSelectedPost(post);
     if (typeof window !== 'undefined') {
@@ -217,6 +228,7 @@ const App: React.FC = () => {
                     post={post} 
                     onClick={handlePostClick}
                     onEdit={isAdmin ? () => setEditingPost(post) : undefined}
+                    onMakeFeatured={isAdmin ? () => handleMakeFeatured(post) : undefined}
                     isAdmin={isAdmin}
                   />
                 ))}
