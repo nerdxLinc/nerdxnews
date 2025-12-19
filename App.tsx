@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import Header from './components/Header';
 import PostCard from './components/PostCard';
@@ -146,8 +145,9 @@ const App: React.FC = () => {
           />
         ) : (
           <>
+            {/* Featured Hero Section */}
             <section 
-              className="relative w-full h-[75vh] min-h-[500px] flex items-end cursor-pointer group overflow-hidden border-b border-zinc-800"
+              className="relative w-full h-[60vh] md:h-[75vh] min-h-[400px] md:min-h-[500px] flex items-end cursor-pointer group overflow-hidden border-b border-zinc-800"
               onClick={() => handlePostClick(featuredPost)}
             >
               <div className="absolute inset-0 bg-zinc-900">
@@ -160,27 +160,28 @@ const App: React.FC = () => {
               
               <div className="absolute inset-0 bg-gradient-to-t from-[#050505] via-[#050505]/60 to-transparent opacity-90"></div>
               
-              <div className="relative z-10 max-w-7xl mx-auto w-full px-6 pb-16">
+              <div className="relative z-10 max-w-7xl mx-auto w-full px-4 md:px-6 pb-8 md:pb-16">
                 <div className="max-w-5xl animate-in fade-in slide-in-from-bottom-8 duration-1000">
-                  <div className="flex items-center gap-4 mb-6">
-                    <span className="px-3 py-1 bg-orange-600/90 backdrop-blur-md text-white text-[9px] font-black tracking-[0.2em] uppercase shadow-[0_0_15px_rgba(234,88,12,0.4)]">
+                  <div className="flex items-center gap-4 mb-4 md:mb-6">
+                    <span className="px-2 md:px-3 py-1 bg-orange-600/90 backdrop-blur-md text-white text-[8px] md:text-[9px] font-black tracking-[0.2em] uppercase shadow-[0_0_15px_rgba(234,88,12,0.4)]">
                       Featured Intel
                     </span>
-                    <div className="h-px w-8 bg-white/40"></div>
-                    <span className="text-zinc-300 text-[10px] font-mono uppercase tracking-widest">
+                    <div className="h-px w-6 md:w-8 bg-white/40"></div>
+                    <span className="text-zinc-300 text-[9px] md:text-[10px] font-mono uppercase tracking-widest">
                       {featuredPost.date}
                     </span>
                   </div>
                   
-                  <h2 className="text-4xl md:text-6xl lg:text-7xl font-black mb-6 leading-[0.95] tracking-tight uppercase italic text-white retro-glow title-stroke group-hover:text-yellow-400 transition-colors duration-500 drop-shadow-2xl">
+                  {/* Responsive typography: text-3xl on mobile, text-7xl on desktop */}
+                  <h2 className="text-3xl md:text-6xl lg:text-7xl font-black mb-4 md:mb-6 leading-[0.95] tracking-tight uppercase italic text-white retro-glow title-stroke group-hover:text-yellow-400 transition-colors duration-500 drop-shadow-2xl">
                     {featuredPost.title}
                   </h2>
                   
-                  <div className="flex flex-col md:flex-row gap-8 items-start md:items-center">
-                    <p className="text-base md:text-xl text-zinc-200 max-w-2xl leading-relaxed font-medium pl-4 border-l-2 border-orange-600">
+                  <div className="flex flex-col md:flex-row gap-6 md:gap-8 items-start md:items-center">
+                    <p className="text-sm md:text-xl text-zinc-200 max-w-2xl leading-relaxed font-medium pl-4 border-l-2 border-orange-600 line-clamp-3 md:line-clamp-none">
                       {featuredPost.excerpt}
                     </p>
-                    <button className="whitespace-nowrap bg-white text-black px-8 py-4 font-black uppercase tracking-[0.2em] hover:bg-orange-600 hover:text-white transition-all shadow-[6px_6px_0_0_#000] hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px] text-xs md:text-sm">
+                    <button className="w-full md:w-auto whitespace-nowrap bg-white text-black px-6 py-3 md:px-8 md:py-4 font-black uppercase tracking-[0.2em] hover:bg-orange-600 hover:text-white transition-all shadow-[6px_6px_0_0_#000] hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px] text-xs md:text-sm">
                        Read Protocol &rarr;
                     </button>
                   </div>
@@ -188,13 +189,14 @@ const App: React.FC = () => {
               </div>
             </section>
 
-            <div className="sticky top-[73px] z-40 bg-[#050505]/95 backdrop-blur-md border-b border-zinc-800">
-              <div className="max-w-7xl mx-auto px-6 py-4 flex overflow-x-auto no-scrollbar gap-8">
+            {/* Filter Bar */}
+            <div className="sticky top-[65px] md:top-[73px] z-40 bg-[#050505]/95 backdrop-blur-md border-b border-zinc-800">
+              <div className="max-w-7xl mx-auto px-4 md:px-6 py-4 flex overflow-x-auto no-scrollbar gap-6 md:gap-8">
                 {(['All', 'Books & Comics', 'Games', 'Movies'] as Category[]).map((cat) => (
                   <button
                     key={cat}
                     onClick={() => setActiveCategory(cat)}
-                    className={`whitespace-nowrap text-[10px] font-black uppercase tracking-[0.2em] transition-all ${
+                    className={`whitespace-nowrap text-[9px] md:text-[10px] font-black uppercase tracking-[0.2em] transition-all flex-shrink-0 ${
                       activeCategory === cat 
                         ? 'text-orange-600 scale-105' 
                         : 'text-zinc-500 hover:text-white'
@@ -206,7 +208,8 @@ const App: React.FC = () => {
               </div>
             </div>
 
-            <div className="max-w-7xl mx-auto px-6 py-12">
+            {/* Main Grid */}
+            <div className="max-w-7xl mx-auto px-4 md:px-6 py-8 md:py-12">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-12">
                 {filteredPosts.map((post) => (
                   <PostCard 
@@ -232,13 +235,13 @@ const App: React.FC = () => {
              <span className="text-[10px] text-zinc-600 uppercase tracking-widest">Est. 2024 /// The Resistance</span>
            </div>
            
-           <div className="flex gap-8 text-[10px] font-bold text-zinc-500 uppercase tracking-widest">
+           <div className="flex flex-wrap justify-center gap-6 md:gap-8 text-[10px] font-bold text-zinc-500 uppercase tracking-widest">
              <a href="#" className="hover:text-orange-600 transition-colors">Manifesto</a>
              <a href="#" className="hover:text-orange-600 transition-colors">Encrypted Comms</a>
              <a href="#" className="hover:text-orange-600 transition-colors">Support</a>
            </div>
 
-           <div className="text-[10px] text-zinc-700 font-mono">
+           <div className="text-[10px] text-zinc-700 font-mono text-center md:text-right">
              © 2024 NERDXNEWS. SYSTEM SECURE.
            </div>
         </div>
@@ -255,10 +258,10 @@ const App: React.FC = () => {
       {isAdmin && !isEditorActive && !selectedPost && (
         <button
           onClick={() => setEditingPost(null)}
-          className="fixed bottom-8 right-8 z-[100] bg-orange-600 text-white w-16 h-16 flex items-center justify-center shadow-[4px_4px_0_0_#fff] hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px] transition-all border-2 border-white group"
+          className="fixed bottom-6 right-6 z-[100] bg-orange-600 text-white w-14 h-14 md:w-16 md:h-16 flex items-center justify-center shadow-[4px_4px_0_0_#fff] hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px] transition-all border-2 border-white group"
           aria-label="Create New Article"
         >
-          <span className="text-4xl font-black group-hover:rotate-90 transition-transform">+</span>
+          <span className="text-3xl md:text-4xl font-black group-hover:rotate-90 transition-transform">+</span>
         </button>
       )}
     </div>
