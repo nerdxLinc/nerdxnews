@@ -9,65 +9,58 @@ interface PostCardProps {
 }
 
 const PostCard: React.FC<PostCardProps> = ({ post, onClick, onEdit, isAdmin }) => {
-  const img = post.imageUrl || post.image;
-
   return (
-    <article className="group border border-zinc-800 bg-zinc-950/60 hover:border-orange-500/60 transition overflow-hidden">
-      <button
-        type="button"
+    <div className="group relative bg-zinc-900 border-2 border-zinc-800 rounded-none overflow-hidden hover:border-orange-500 transition-all duration-300 shadow-[8px_8px_0px_0px_rgba(39,39,42,1)] hover:shadow-[8px_8px_0px_0px_rgba(255,87,34,1)] hover:-translate-y-1">
+      <div 
+        className="aspect-video overflow-hidden cursor-pointer relative"
         onClick={() => onClick(post)}
-        className="block w-full text-left"
-        aria-label={`Open ${post.title}`}
       >
-        <div className="relative aspect-[16/9] bg-zinc-900 overflow-hidden">
-          {img ? (
-            <img
-              src={img}
-              alt={post.title}
-              className="h-full w-full object-cover opacity-95 group-hover:scale-[1.02] transition-transform duration-300"
-              loading="lazy"
-            />
+        <img 
+          src={post.imageUrl} 
+          alt={post.title} 
+          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 opacity-90"
+        />
+        <div className="absolute top-4 left-4">
+          <span className="px-2 py-1 bg-black text-orange-500 text-[10px] font-black tracking-widest uppercase border border-orange-500">
+            {post.category}
+          </span>
+        </div>
+      </div>
+      
+      <div className="p-4 sm:p-6">
+        <h3 
+          className="text-xl sm:text-2xl font-black text-white mb-4 line-clamp-2 cursor-pointer group-hover:text-orange-400 transition-colors leading-[1.1] uppercase italic"
+          onClick={() => onClick(post)}
+        >
+          {post.title}
+        </h3>
+        
+        <p className="text-zinc-400 text-sm line-clamp-3 mb-6 leading-relaxed font-medium">
+          {post.excerpt}
+        </p>
+
+        <div className="flex items-center justify-between pt-4 border-t border-zinc-800">
+          <div className="flex flex-col">
+            <span className="text-[10px] text-zinc-600 font-black uppercase tracking-widest">AUTHOR</span>
+            <span className="text-xs text-zinc-300 font-bold uppercase">{post.author}</span>
+          </div>
+          
+          {isAdmin && onEdit ? (
+            <button 
+              onClick={(e) => { e.stopPropagation(); onEdit(post); }}
+              className="px-4 py-2 bg-orange-600 text-white text-[10px] font-black uppercase tracking-widest hover:bg-orange-500 transition-colors"
+            >
+              EDIT INTEL
+            </button>
           ) : (
-            <div className="h-full w-full flex items-center justify-center text-zinc-500 text-sm">
-              No image
+            <div className="flex flex-col items-end">
+              <span className="text-[10px] text-zinc-600 font-black uppercase tracking-widest">DATE</span>
+              <span className="text-xs text-zinc-300 font-bold uppercase">{post.date}</span>
             </div>
           )}
-
-          <div className="absolute left-3 top-3">
-            <span className="inline-flex items-center px-2 py-1 text-[10px] sm:text-xs font-black tracking-widest uppercase border border-orange-500/60 bg-black/70 text-orange-400">
-              {post.category}
-            </span>
-          </div>
         </div>
-
-        <div className="p-4 sm:p-5">
-          <h3 className="text-lg sm:text-xl font-black leading-tight">
-            {post.title}
-          </h3>
-
-          <p className="mt-2 text-sm sm:text-base text-zinc-300 line-clamp-3">
-            {post.excerpt}
-          </p>
-
-          <div className="mt-3 flex items-center justify-between gap-3 text-xs sm:text-sm text-zinc-400">
-            <span>{post.author ? `By ${post.author}` : ''}</span>
-            <span>{post.date}</span>
-          </div>
-        </div>
-      </button>
-
-      {isAdmin && onEdit && (
-        <div className="px-4 sm:px-5 pb-4">
-          <button
-            type="button"
-            onClick={() => onEdit(post)}
-            className="w-full px-3 py-2 text-xs sm:text-sm font-bold uppercase border border-orange-500/60 text-orange-300 hover:bg-orange-500/10 transition"
-          >
-            Edit
-          </button>
-        </div>
-      )}
-    </article>
+      </div>
+    </div>
   );
 };
 
