@@ -1,268 +1,242 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import Header from './components/Header';
 import PostCard from './components/PostCard';
 import PostDetail from './components/PostDetail';
 import Newsletter from './components/Newsletter';
 import Editor from './components/Editor';
-import { Post, Category } from './types';
 import { INITIAL_POSTS } from './constants';
+import { Post } from './types';
+
+// This app loads posts in this order:
+// 1) LocalStorage (so your edits persist in your browser)
+// 2) public/posts.json (so you can ship real articles with your deploy)
+// 3) constants.tsx INITIAL_POSTS (fallback)
+//
+// To add your 4 real articles:
+// - Put images in: public/images/
+// - Add/replace entries in: public/posts.json
+// - Push to GitHub -> Netlify will redeploy.
+
+const STORAGE_KEY = 'nerdxnews.posts.v1';
+
+async function loadPostsJson(): Promise<Post[] | null> {
+  try {
+    const res = await fetch('/posts.json', { cache: 'no-store' });
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!Array.isArray(data)) return null;
+    return data as Post[];
+  } catch {
+    return null;
+  }
+}
+
+function loadFromStorage(): Post[] | null {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? (parsed as Post[]) : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveToStorage(posts: Post[]) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(posts));
+  } catch {
+    // ignore
+  }
+}
 
 const App: React.FC = () => {
-  // CRITICAL UPDATE: Changed key to 'nerdxnews_production_build_v1'
-  // This invalidates the previous cache and forces the browser to load
-  // the articles currently listed in your constants.tsx file.
-  const STORAGE_KEY = 'nerdxnews_production_build_v1';
-
-  const [posts, setPosts] = useState<Post[]>(() => {
-    if (typeof window === 'undefined') return INITIAL_POSTS;
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        // Merge strategy:
-        // 1. Load what is in constants.tsx (your hardcoded articles)
-        // 2. Add any NEW posts created via the Admin Editor that are saved in local storage
-        // This ensures your hardcoded articles NEVER disappear.
-        const savedIds = new Set(parsed.map((p: Post) => p.id));
-        const missingPosts = INITIAL_POSTS.filter(p => !savedIds.has(p.id));
-        
-        if (missingPosts.length > 0) {
-          // Put hardcoded posts first, then saved user posts
-          return [...missingPosts, ...parsed];
-        }
-        return parsed.length > 0 ? parsed : INITIAL_POSTS;
-      }
-      // If no save found (first visit for this version), load the hardcoded list
-      return INITIAL_POSTS;
-    } catch (e) {
-      console.error("Failed to load posts", e);
-      return INITIAL_POSTS;
-    }
-  });
-  
-  const [selectedPost, setSelectedPost] = useState<Post | null>(null);
-  const [activeCategory, setActiveCategory] = useState<Category>('All');
   const [isAdmin, setIsAdmin] = useState(false);
-  const [editingPost, setEditingPost] = useState<Post | null | undefined>(undefined); 
+  const [activeCategory, setActiveCategory] = useState<string>('All');
+  const [selectedPost, setSelectedPost] = useState<Post | null>(null);
+  const [editingPost, setEditingPost] = useState<Post | null>(null);
 
+  const [posts, setPosts] = useState<Post[]>(INITIAL_POSTS);
+
+  // Load posts from storage / posts.json on first mount
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(posts));
-      } catch (e) {
-        console.error("Failed to save posts", e);
-      }
-    }
-  }, [posts]);
-
-  // Ensure featuredPost is never undefined by falling back multiple times
-  const featuredPost = useMemo(() => {
-    // 1. Try to find a post marked explicitly as featured
-    const featured = posts.find(p => p.isFeatured);
-    if (featured) return featured;
-    
-    // 2. Fallback to the first post in the dynamic list
-    if (posts.length > 0) return posts[0];
-    
-    // 3. Ultimate fallback to the hardcoded file (prevents white screen crash)
-    return INITIAL_POSTS[0];
-  }, [posts]);
-  
-  const filteredPosts = useMemo(() => {
-    let list = posts.filter(p => p.id !== (selectedPost?.id || ''));
-    if (activeCategory !== 'All') {
-      list = list.filter(p => p.category === activeCategory);
-    }
-    return list;
-  }, [posts, activeCategory, selectedPost]);
-
-  const handleSavePost = (updatedPost: Post) => {
-    setPosts(prev => {
-      const exists = prev.find(p => p.id === updatedPost.id);
-      if (exists) {
-        return prev.map(p => p.id === updatedPost.id ? updatedPost : p);
-      }
-      return [updatedPost, ...prev];
-    });
-    setEditingPost(undefined);
-  };
-
-  const handlePostClick = (post: Post) => {
-    setSelectedPost(post);
-    if (typeof window !== 'undefined') {
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    }
-  };
-
-  const handleAdminLogin = () => {
-    if (isAdmin) {
-      const confirmLogout = window.confirm("Terminate Admin Session?");
-      if (confirmLogout) setIsAdmin(false);
+    const fromStorage = loadFromStorage();
+    if (fromStorage && fromStorage.length) {
+      setPosts(fromStorage);
       return;
     }
+    loadPostsJson().then((jsonPosts) => {
+      if (jsonPosts && jsonPosts.length) setPosts(jsonPosts);
+    });
+  }, []);
 
-    const password = window.prompt("ENTER COMMAND CODE (Hint: nerdx)");
-    if (password && password.toLowerCase() === 'nerdx') {
-      setIsAdmin(true);
-      alert("ACCESS GRANTED.\n\nEditor Mode Initialized.");
-    } else {
-      if (password !== null) {
-        alert("ACCESS DENIED.");
-      }
-    }
+  // Persist posts if admin edits them
+  useEffect(() => {
+    saveToStorage(posts);
+  }, [posts]);
+
+  const categories = useMemo(() => {
+    const set = new Set<string>();
+    posts.forEach((p) => set.add(String(p.category)));
+    return ['All', ...Array.from(set).sort()];
+  }, [posts]);
+
+  const filtered = useMemo(() => {
+    if (activeCategory === 'All') return posts;
+    return posts.filter((p) => String(p.category) === activeCategory);
+  }, [posts, activeCategory]);
+
+  const featured = filtered[0] ?? posts[0];
+
+  const handleAdminLogin = () => {
+    // Simple toggle for prototype. Replace with real auth later.
+    setIsAdmin((v) => !v);
   };
 
-  if (!featuredPost) {
-    return (
-      <div className="min-h-screen bg-black text-white flex items-center justify-center font-mono animate-pulse">
-        INITIALIZING DATA STREAM...
-      </div>
-    );
-  }
-
-  const isEditorActive = editingPost !== undefined;
+  const handleSavePost = (draft: Post) => {
+    setPosts((prev) => {
+      const idx = prev.findIndex((p) => p.id === draft.id);
+      if (idx >= 0) {
+        const next = [...prev];
+        next[idx] = draft;
+        return next;
+      }
+      return [draft, ...prev];
+    });
+    setEditingPost(null);
+  };
 
   return (
-    <div className={`min-h-screen flex flex-col selection:bg-orange-500 selection:text-white bg-[#050505] ${isAdmin ? 'border-t-4 border-orange-600' : ''}`}>
-      {isAdmin && (
-        <div className="fixed bottom-4 left-4 z-[50] bg-orange-600 text-white text-[10px] font-black px-4 py-2 tracking-widest uppercase shadow-lg border border-white/20 pointer-events-none">
-          EDITOR MODE ACTIVE
-        </div>
-      )}
-      
-      <Header 
-        onHome={() => { setSelectedPost(null); setActiveCategory('All'); }}
+    <div className="min-h-screen bg-black text-zinc-100">
+      <Header
+        onHome={() => {
+          setSelectedPost(null);
+          setActiveCategory('All');
+        }}
         onAdminToggle={handleAdminLogin}
         isAdmin={isAdmin}
       />
 
-      <main className="flex-1 relative">
-        {selectedPost ? (
-          <PostDetail 
-            post={selectedPost} 
-            onBack={() => setSelectedPost(null)} 
-            isAdmin={isAdmin}
-          />
-        ) : (
-          <>
-            {/* Featured Hero Section */}
-            <section 
-              className="relative w-full h-[60vh] md:h-[75vh] min-h-[400px] md:min-h-[500px] flex items-end cursor-pointer group overflow-hidden border-b border-zinc-800"
-              onClick={() => handlePostClick(featuredPost)}
-            >
-              <div className="absolute inset-0 bg-zinc-900">
-                <img 
-                  src={featuredPost.imageUrl} 
-                  alt={featuredPost.title} 
-                  className="w-full h-full object-cover opacity-70 group-hover:opacity-80 group-hover:scale-105 transition-all duration-[1.5s] ease-out"
-                />
-              </div>
-              
-              <div className="absolute inset-0 bg-gradient-to-t from-[#050505] via-[#050505]/60 to-transparent opacity-90"></div>
-              
-              <div className="relative z-10 max-w-7xl mx-auto w-full px-4 md:px-6 pb-8 md:pb-16">
-                <div className="max-w-5xl animate-in fade-in slide-in-from-bottom-8 duration-1000">
-                  <div className="flex items-center gap-4 mb-4 md:mb-6">
-                    <span className="px-2 md:px-3 py-1 bg-orange-600/90 backdrop-blur-md text-white text-[8px] md:text-[9px] font-black tracking-[0.2em] uppercase shadow-[0_0_15px_rgba(234,88,12,0.4)]">
-                      Featured Intel
-                    </span>
-                    <div className="h-px w-6 md:w-8 bg-white/40"></div>
-                    <span className="text-zinc-300 text-[9px] md:text-[10px] font-mono uppercase tracking-widest">
-                      {featuredPost.date}
-                    </span>
+      {editingPost ? (
+        <Editor post={editingPost} onSave={handleSavePost} onCancel={() => setEditingPost(null)} />
+      ) : (
+        <main className="mx-auto max-w-7xl px-4 sm:px-6 py-6 sm:py-10">
+          {/* Hero / Featured */}
+          {featured && (
+            <section className="border border-orange-500/40 bg-zinc-950/60 overflow-hidden">
+              <div className="grid grid-cols-1 md:grid-cols-2">
+                <div className="p-5 sm:p-8">
+                  <div className="text-[10px] sm:text-xs tracking-[0.25em] uppercase text-orange-400">
+                    Featured
                   </div>
-                  
-                  {/* Responsive typography: text-3xl on mobile, text-7xl on desktop */}
-                  <h2 className="text-3xl md:text-6xl lg:text-7xl font-black mb-4 md:mb-6 leading-[0.95] tracking-tight uppercase italic text-white retro-glow title-stroke group-hover:text-yellow-400 transition-colors duration-500 drop-shadow-2xl">
-                    {featuredPost.title}
+                  <h2 className="mt-2 text-2xl sm:text-4xl font-black leading-tight">
+                    {featured.title}
                   </h2>
-                  
-                  <div className="flex flex-col md:flex-row gap-6 md:gap-8 items-start md:items-center">
-                    <p className="text-sm md:text-xl text-zinc-200 max-w-2xl leading-relaxed font-medium pl-4 border-l-2 border-orange-600 line-clamp-3 md:line-clamp-none">
-                      {featuredPost.excerpt}
-                    </p>
-                    <button className="w-full md:w-auto whitespace-nowrap bg-white text-black px-6 py-3 md:px-8 md:py-4 font-black uppercase tracking-[0.2em] hover:bg-orange-600 hover:text-white transition-all shadow-[6px_6px_0_0_#000] hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px] text-xs md:text-sm">
-                       Read Protocol &rarr;
+                  <p className="mt-3 text-sm sm:text-base text-zinc-300">
+                    {featured.excerpt}
+                  </p>
+
+                  <div className="mt-5 flex flex-col sm:flex-row gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedPost(featured)}
+                      className="px-4 py-3 font-bold uppercase border border-orange-500 bg-orange-600/90 hover:bg-orange-500 transition"
+                    >
+                      Read →
                     </button>
+                    {isAdmin && (
+                      <button
+                        type="button"
+                        onClick={() => setEditingPost(featured)}
+                        className="px-4 py-3 font-bold uppercase border border-orange-500/60 text-orange-300 hover:bg-orange-500/10 transition"
+                      >
+                        Edit
+                      </button>
+                    )}
                   </div>
+                </div>
+
+                <div className="aspect-[16/9] md:aspect-auto bg-zinc-900">
+                  {(featured.imageUrl || featured.image) ? (
+                    <img
+                      src={featured.imageUrl || featured.image}
+                      alt={featured.title}
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <div className="h-full w-full flex items-center justify-center text-zinc-500 text-sm">
+                      No image
+                    </div>
+                  )}
                 </div>
               </div>
             </section>
+          )}
 
-            {/* Filter Bar */}
-            <div className="sticky top-[65px] md:top-[73px] z-40 bg-[#050505]/95 backdrop-blur-md border-b border-zinc-800">
-              <div className="max-w-7xl mx-auto px-4 md:px-6 py-4 flex overflow-x-auto no-scrollbar gap-6 md:gap-8">
-                {(['All', 'Books & Comics', 'Games', 'Movies'] as Category[]).map((cat) => (
-                  <button
-                    key={cat}
-                    onClick={() => setActiveCategory(cat)}
-                    className={`whitespace-nowrap text-[9px] md:text-[10px] font-black uppercase tracking-[0.2em] transition-all flex-shrink-0 ${
-                      activeCategory === cat 
-                        ? 'text-orange-600 scale-105' 
-                        : 'text-zinc-500 hover:text-white'
-                    }`}
-                  >
-                    {cat === 'All' ? '/// All Feeds' : cat}
-                  </button>
-                ))}
-              </div>
-            </div>
+          {/* Category tabs */}
+          <div className="mt-8 flex flex-wrap gap-2">
+            {categories.map((c) => (
+              <button
+                key={c}
+                type="button"
+                onClick={() => setActiveCategory(c)}
+                className={`px-3 py-2 text-xs sm:text-sm font-bold uppercase border transition
+                  ${activeCategory === c ? 'border-orange-500 text-orange-300' : 'border-zinc-800 text-zinc-300 hover:border-orange-500/70'}`}
+              >
+                {c}
+              </button>
+            ))}
+            {isAdmin && (
+              <button
+                type="button"
+                onClick={() =>
+                  setEditingPost({
+                    id: String(Date.now()),
+                    title: '',
+                    excerpt: '',
+                    content: '',
+                    date: new Date().toISOString().split('T')[0],
+                    category: 'news',
+                    imageUrl: '',
+                    author: ''
+                  })
+                }
+                className="ml-auto px-3 py-2 text-xs sm:text-sm font-bold uppercase border border-orange-500 bg-orange-600/90 hover:bg-orange-500 transition"
+              >
+                + New
+              </button>
+            )}
+          </div>
 
-            {/* Main Grid */}
-            <div className="max-w-7xl mx-auto px-4 md:px-6 py-8 md:py-12">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-12">
-                {filteredPosts.map((post) => (
-                  <PostCard 
-                    key={post.id} 
-                    post={post} 
-                    onClick={handlePostClick}
-                    onEdit={isAdmin ? () => setEditingPost(post) : undefined}
-                    isAdmin={isAdmin}
-                  />
-                ))}
-              </div>
-            </div>
+          {/* Grid */}
+          <section className="mt-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+            {filtered.map((p) => (
+              <PostCard
+                key={p.id}
+                post={p}
+                isAdmin={isAdmin}
+                onClick={(post) => setSelectedPost(post)}
+                onEdit={(post) => setEditingPost(post)}
+              />
+            ))}
+          </section>
 
-            <Newsletter />
-          </>
-        )}
-      </main>
-
-      <footer className="border-t border-zinc-800 bg-black py-12 px-6">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-8">
-           <div className="flex flex-col gap-2 text-center md:text-left">
-             <span className="text-2xl font-['Orbitron'] font-black text-white tracking-tighter">NERD<span className="text-orange-600">X</span>NEWS</span>
-             <span className="text-[10px] text-zinc-600 uppercase tracking-widest">Est. 2024 /// The Resistance</span>
-           </div>
-           
-           <div className="flex flex-wrap justify-center gap-6 md:gap-8 text-[10px] font-bold text-zinc-500 uppercase tracking-widest">
-             <a href="#" className="hover:text-orange-600 transition-colors">Manifesto</a>
-             <a href="#" className="hover:text-orange-600 transition-colors">Encrypted Comms</a>
-             <a href="#" className="hover:text-orange-600 transition-colors">Support</a>
-           </div>
-
-           <div className="text-[10px] text-zinc-700 font-mono text-center md:text-right">
-             © 2024 NERDXNEWS. SYSTEM SECURE.
-           </div>
-        </div>
-      </footer>
-
-      {isEditorActive && (
-        <Editor 
-          post={editingPost} 
-          onSave={handleSavePost}
-          onClose={() => setEditingPost(undefined)}
-        />
+          <Newsletter />
+        </main>
       )}
-      
-      {isAdmin && !isEditorActive && !selectedPost && (
-        <button
-          onClick={() => setEditingPost(null)}
-          className="fixed bottom-6 right-6 z-[100] bg-orange-600 text-white w-14 h-14 md:w-16 md:h-16 flex items-center justify-center shadow-[4px_4px_0_0_#fff] hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px] transition-all border-2 border-white group"
-          aria-label="Create New Article"
-        >
-          <span className="text-3xl md:text-4xl font-black group-hover:rotate-90 transition-transform">+</span>
-        </button>
+
+      {/* Detail view (on top of list) */}
+      {selectedPost && !editingPost && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm overflow-auto z-50">
+          <div className="min-h-full">
+            <PostDetail
+              post={selectedPost}
+              isAdmin={isAdmin}
+              onBack={() => setSelectedPost(null)}
+              onEdit={(p) => setEditingPost(p)}
+            />
+          </div>
+        </div>
       )}
     </div>
   );
