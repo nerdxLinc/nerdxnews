@@ -63,7 +63,7 @@ const Editor: React.FC<EditorProps> = ({ post, onSave, onClose }) => {
   },`;
     
     navigator.clipboard.writeText(codeString);
-    alert("Code copied! Now open constants.tsx and PASTE this into the INITIAL_POSTS list.");
+    alert("DEPLOYMENT CODE COPIED!\n\n1. Open 'constants.tsx'\n2. Scroll to 'INITIAL_POSTS'\n3. Paste this code at the top of the list.\n4. Commit & Push to publish.");
   };
 
   // z-[200] ensures it is above the scanline effect (z-100)
@@ -131,8 +131,12 @@ const Editor: React.FC<EditorProps> = ({ post, onSave, onClose }) => {
                   type="text" 
                   value={imageUrl}
                   onChange={(e) => setImageUrl(e.target.value)}
+                  placeholder="https://... or /images/file.jpg"
                   className="w-full bg-zinc-950 border border-zinc-800 px-4 py-3 rounded text-white outline-none focus:border-orange-600 text-xs"
                 />
+                <p className="text-[9px] text-zinc-600 mt-2 font-mono leading-tight">
+                  <span className="text-orange-600 font-bold">TIP:</span> Use <span className="text-zinc-400">https://imgur.com/...</span> OR create a <span className="text-zinc-400">public/images</span> folder and use <span className="text-zinc-400">/images/filename.jpg</span>.
+                </p>
               </div>
             </div>
             
@@ -161,12 +165,15 @@ const Editor: React.FC<EditorProps> = ({ post, onSave, onClose }) => {
         </div>
 
         <div className="p-6 border-t border-zinc-800 flex justify-between items-center bg-zinc-900 sticky bottom-0">
-          <button
-             onClick={handleCopyForCode}
-             className="flex items-center gap-2 text-yellow-500 text-[10px] uppercase font-bold tracking-widest hover:text-white transition-colors border border-yellow-500/30 px-4 py-2 rounded hover:bg-yellow-500/10"
-          >
-             <span>&lt;/&gt; COPY CODE</span>
-          </button>
+          <div className="flex flex-col gap-1">
+             <button
+                onClick={handleCopyForCode}
+                className="flex items-center gap-2 text-yellow-500 text-[10px] uppercase font-bold tracking-widest hover:text-white transition-colors border border-yellow-500/30 px-4 py-2 rounded hover:bg-yellow-500/10"
+             >
+                <span>&lt;/&gt; COPY DEPLOYMENT CODE</span>
+             </button>
+             <span className="text-[9px] text-zinc-600 font-mono hidden md:inline">Paste into 'constants.tsx' to publish</span>
+          </div>
           
           <div className="flex gap-4">
             <button 
@@ -179,7 +186,7 @@ const Editor: React.FC<EditorProps> = ({ post, onSave, onClose }) => {
               onClick={handleSave}
               className="bg-orange-600 text-white hover:bg-yellow-400 hover:text-black px-10 py-2 rounded-sm font-bold uppercase tracking-widest transition-all shadow-[4px_4px_0_0_#000]"
             >
-              Save (Local Only)
+              Save (Local)
             </button>
           </div>
         </div>
