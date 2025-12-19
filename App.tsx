@@ -8,12 +8,17 @@ import { Post, Category } from './types';
 import { INITIAL_POSTS } from './constants';
 
 const App: React.FC = () => {
-  // Safe initialization that won't break during static build
+  // Initialize posts. We prioritize INITIAL_POSTS if LocalStorage is empty.
   const [posts, setPosts] = useState<Post[]>(() => {
     if (typeof window === 'undefined') return INITIAL_POSTS;
     try {
       const saved = localStorage.getItem('nerdxnews_posts');
-      return saved ? JSON.parse(saved) : INITIAL_POSTS;
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        // If local storage has an empty array (user visited before articles were added), use INITIAL_POSTS
+        return parsed.length > 0 ? parsed : INITIAL_POSTS;
+      }
+      return INITIAL_POSTS;
     } catch (e) {
       console.error("Failed to load posts", e);
       return INITIAL_POSTS;
