@@ -14,6 +14,7 @@ const Editor: React.FC<EditorProps> = ({ post, onSave, onClose }) => {
   const [content, setContent] = useState(post?.content || '');
   const [category, setCategory] = useState<Category>(post?.category || 'Games');
   const [imageUrl, setImageUrl] = useState(post?.imageUrl || 'https://picsum.photos/seed/nerdx/800/600');
+  const [isFeatured, setIsFeatured] = useState<boolean>(post?.isFeatured || false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [aiPrompt, setAiPrompt] = useState('');
 
@@ -39,7 +40,7 @@ const Editor: React.FC<EditorProps> = ({ post, onSave, onClose }) => {
       imageUrl,
       author: post?.author || 'Commander X',
       date: post?.date || new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-      isFeatured: post?.isFeatured || false
+      isFeatured
     };
   };
 
@@ -134,6 +135,20 @@ const Editor: React.FC<EditorProps> = ({ post, onSave, onClose }) => {
                   placeholder="https://... or /images/file.jpg"
                   className="w-full bg-zinc-950 border border-zinc-800 px-4 py-3 rounded text-white outline-none focus:border-orange-600 text-xs"
                 />
+
+
+<div className="mt-3 flex items-center gap-2">
+  <input
+    id="post-featured"
+    type="checkbox"
+    checked={isFeatured}
+    onChange={(e) => setIsFeatured(e.target.checked)}
+    className="h-4 w-4 accent-orange-600"
+  />
+  <label htmlFor="post-featured" className="text-xs font-bold text-zinc-500 uppercase">
+    Featured (Front Page Lead Story)
+  </label>
+</div>
                 <p className="text-[9px] text-zinc-600 mt-2 font-mono leading-tight">
                   <span className="text-orange-600 font-bold">TIP:</span> Use <span className="text-zinc-400">https://imgur.com/...</span> OR create a <span className="text-zinc-400">public/images</span> folder and use <span className="text-zinc-400">/images/filename.jpg</span>.
                 </p>

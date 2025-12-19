@@ -76,26 +76,32 @@ const App: React.FC = () => {
     return list;
   }, [posts, activeCategory, selectedPost]);
 
-  const handleSavePost = (updatedPost: Post) => {
+  
+const handleSavePost = (updatedPost: Post) => {
     setPosts(prev => {
+      // Upsert the post
       const exists = prev.find(p => p.id === updatedPost.id);
-      if (exists) {
-        return prev.map(p => p.id === updatedPost.id ? updatedPost : p);
-      }
-      return [updatedPost, ...prev];
-    });
-    setEditingPost(undefined);
-  };
+      let next = exists
+        ? prev.map(p => (p.id === updatedPost.id ? updatedPost : p))
+        : [updatedPost, ...prev];
 
-  const handleMakeFeatured = (targetPost: Post) => {
-    setPosts(prev => prev.map(p => ({
-      ...p,
-      isFeatured: p.id === targetPost.id
-    })));
-    // Scroll to top so the user can see the new Hero section immediately
-    if (typeof window !== 'undefined') {
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    }
+      // If user marked this post as Featured, ensure it is the ONLY featured post
+      if (updatedPost.isFeatured) {
+        next = next.map(p =>
+          p.id === updatedPost.id ? { ...p, isFeatured: true } : { ...p, isFeatured: false }
+        );
+
+        // Also make sure it appears first in the list (front page lead story)
+        next = [
+          next.find(p => p.id === updatedPost.id)!,
+          ...next.filter(p => p.id !== updatedPost.id),
+        ];
+      }
+
+      return next;
+    });
+
+    setEditingPost(undefined);
   };
 
   const handlePostClick = (post: Post) => {
@@ -228,7 +234,6 @@ const App: React.FC = () => {
                     post={post} 
                     onClick={handlePostClick}
                     onEdit={isAdmin ? () => setEditingPost(post) : undefined}
-                    onMakeFeatured={isAdmin ? () => handleMakeFeatured(post) : undefined}
                     isAdmin={isAdmin}
                   />
                 ))}

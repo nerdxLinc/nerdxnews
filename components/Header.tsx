@@ -9,10 +9,10 @@ interface HeaderProps {
 
 const Header: React.FC<HeaderProps> = ({ onHome, onAdminToggle, isAdmin }) => {
   return (
-    <header className="sticky top-0 z-50 glass border-b-2 border-orange-500 px-4 py-5 sm:px-6 sm:py-8 md:py-10">
-      <div className="max-w-7xl mx-auto flex flex-col lg:flex-row items-center justify-between gap-6 sm:gap-10">
+    <header className="sticky top-0 z-50 glass border-b-2 border-orange-500 px-6 py-8 md:py-10">
+      <div className="max-w-7xl mx-auto flex flex-col lg:flex-row items-center justify-between gap-10">
         <div 
-          className="flex items-center gap-4 sm:gap-8 cursor-pointer group flex-shrink-0"
+          className="flex items-center gap-8 cursor-pointer group flex-shrink-0"
           onClick={onHome}
         >
           <div className="relative flex-shrink-0">
@@ -20,20 +20,20 @@ const Header: React.FC<HeaderProps> = ({ onHome, onAdminToggle, isAdmin }) => {
             <img 
               src={LOGO_URL} 
               alt="NerdXNews Logo" 
-              className="relative h-20 sm:h-24 md:h-32 w-auto object-contain border-4 border-zinc-800 rounded-none group-hover:scale-105 transition-transform shadow-[8px_8px_0px_0px_rgba(255,87,34,1)]"
+              className="relative h-24 md:h-32 w-auto object-contain border-4 border-zinc-800 rounded-none group-hover:scale-105 transition-transform shadow-[8px_8px_0px_0px_rgba(255,87,34,1)]"
             />
           </div>
           <div className="flex flex-col">
-            <h1 className="text-3xl sm:text-4xl md:text-6xl font-black tracking-tighter text-white leading-none uppercase italic">
+            <h1 className="text-4xl md:text-6xl font-black tracking-tighter text-white leading-none uppercase italic">
               NERDX<span className="text-orange-500">NEWS</span>
             </h1>
-            <span className="text-[10px] sm:text-xs font-black tracking-[0.5em] text-zinc-500 mt-2 uppercase">
+            <span className="text-[10px] md:text-xs font-black tracking-[0.5em] text-zinc-500 mt-2 uppercase">
               The Evolution of Nerd Culture
             </span>
           </div>
         </div>
 
-        <nav className="hidden xl:flex items-center gap-6 sm:gap-10 font-black tracking-[0.2em] text-xs italic">
+        <nav className="hidden xl:flex items-center gap-10 font-black tracking-[0.2em] text-xs italic">
           <a href="#" className="hover:text-orange-500 transition-colors border-b-2 border-transparent hover:border-orange-500 pb-1">BOOKS & COMICS</a>
           <a href="#" className="hover:text-orange-500 transition-colors border-b-2 border-transparent hover:border-orange-500 pb-1">GAMES</a>
           <a href="#" className="hover:text-orange-500 transition-colors border-b-2 border-transparent hover:border-orange-500 pb-1 text-zinc-100">MOVIES</a>

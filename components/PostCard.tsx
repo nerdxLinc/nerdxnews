@@ -27,9 +27,9 @@ const PostCard: React.FC<PostCardProps> = ({ post, onClick, onEdit, isAdmin }) =
         </div>
       </div>
       
-      <div className="p-4 sm:p-6">
+      <div className="p-6">
         <h3 
-          className="text-xl sm:text-2xl font-black text-white mb-4 line-clamp-2 cursor-pointer group-hover:text-orange-400 transition-colors leading-[1.1] uppercase italic"
+          className="text-2xl font-black text-white mb-4 line-clamp-2 cursor-pointer group-hover:text-orange-400 transition-colors leading-[1.1] uppercase italic"
           onClick={() => onClick(post)}
         >
           {post.title}
