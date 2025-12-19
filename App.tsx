@@ -23,6 +23,7 @@ const App: React.FC = () => {
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
   const [activeCategory, setActiveCategory] = useState<Category>('All');
   const [isAdmin, setIsAdmin] = useState(false);
+  // undefined = closed, null = new post, Post object = editing
   const [editingPost, setEditingPost] = useState<Post | null | undefined>(undefined); 
 
   useEffect(() => {
@@ -99,10 +100,13 @@ const App: React.FC = () => {
     );
   }
 
+  // Determine if editor is active
+  const isEditorActive = editingPost !== undefined;
+
   return (
     <div className={`min-h-screen flex flex-col selection:bg-orange-500 selection:text-white bg-[#050505] ${isAdmin ? 'border-t-4 border-orange-600' : ''}`}>
       {isAdmin && (
-        <div className="fixed bottom-4 left-4 z-[100] bg-orange-600 text-white text-[10px] font-black px-4 py-2 tracking-widest uppercase shadow-lg border border-white/20 pointer-events-none">
+        <div className="fixed bottom-4 left-4 z-[50] bg-orange-600 text-white text-[10px] font-black px-4 py-2 tracking-widest uppercase shadow-lg border border-white/20 pointer-events-none">
           EDITOR MODE ACTIVE
         </div>
       )}
@@ -113,7 +117,7 @@ const App: React.FC = () => {
         isAdmin={isAdmin}
       />
 
-      <main className="flex-1">
+      <main className="flex-1 relative">
         {selectedPost ? (
           <PostDetail 
             post={selectedPost} 
@@ -225,8 +229,8 @@ const App: React.FC = () => {
         </div>
       </footer>
 
-      {/* Admin Editor Modal */}
-      {(editingPost !== undefined || (isAdmin && editingPost === null)) && (
+      {/* Admin Editor Modal - Higher Z-Index */}
+      {isEditorActive && (
         <Editor 
           post={editingPost} 
           onSave={handleSavePost}
@@ -235,10 +239,12 @@ const App: React.FC = () => {
       )}
       
       {/* Floating Action Button for Admin to create new post */}
-      {isAdmin && !editingPost && !selectedPost && (
+      {/* Only show if Admin is TRUE, Editor is CLOSED (undefined), and NOT reading a post */}
+      {isAdmin && !isEditorActive && !selectedPost && (
         <button
           onClick={() => setEditingPost(null)}
           className="fixed bottom-8 right-8 z-[100] bg-orange-600 text-white w-16 h-16 flex items-center justify-center shadow-[4px_4px_0_0_#fff] hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px] transition-all border-2 border-white group"
+          aria-label="Create New Article"
         >
           <span className="text-4xl font-black group-hover:rotate-90 transition-transform">+</span>
         </button>
