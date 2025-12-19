@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import Header from './components/Header';
 import PostCard from './components/PostCard';
@@ -8,16 +9,31 @@ import { Post, Category } from './types';
 import { INITIAL_POSTS } from './constants';
 
 const App: React.FC = () => {
-  // Initialize posts. We prioritize INITIAL_POSTS if LocalStorage is empty.
+  // CRITICAL UPDATE: Changed key to 'nerdxnews_production_build_v1'
+  // This invalidates the previous cache and forces the browser to load
+  // the articles currently listed in your constants.tsx file.
+  const STORAGE_KEY = 'nerdxnews_production_build_v1';
+
   const [posts, setPosts] = useState<Post[]>(() => {
     if (typeof window === 'undefined') return INITIAL_POSTS;
     try {
-      const saved = localStorage.getItem('nerdxnews_posts');
+      const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
-        // If local storage has an empty array (user visited before articles were added), use INITIAL_POSTS
+        // Merge strategy:
+        // 1. Load what is in constants.tsx (your hardcoded articles)
+        // 2. Add any NEW posts created via the Admin Editor that are saved in local storage
+        // This ensures your hardcoded articles NEVER disappear.
+        const savedIds = new Set(parsed.map((p: Post) => p.id));
+        const missingPosts = INITIAL_POSTS.filter(p => !savedIds.has(p.id));
+        
+        if (missingPosts.length > 0) {
+          // Put hardcoded posts first, then saved user posts
+          return [...missingPosts, ...parsed];
+        }
         return parsed.length > 0 ? parsed : INITIAL_POSTS;
       }
+      // If no save found (first visit for this version), load the hardcoded list
       return INITIAL_POSTS;
     } catch (e) {
       console.error("Failed to load posts", e);
@@ -28,13 +44,12 @@ const App: React.FC = () => {
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
   const [activeCategory, setActiveCategory] = useState<Category>('All');
   const [isAdmin, setIsAdmin] = useState(false);
-  // undefined = closed, null = new post, Post object = editing
   const [editingPost, setEditingPost] = useState<Post | null | undefined>(undefined); 
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
       try {
-        localStorage.setItem('nerdxnews_posts', JSON.stringify(posts));
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(posts));
       } catch (e) {
         console.error("Failed to save posts", e);
       }
@@ -43,9 +58,14 @@ const App: React.FC = () => {
 
   // Ensure featuredPost is never undefined by falling back multiple times
   const featuredPost = useMemo(() => {
+    // 1. Try to find a post marked explicitly as featured
     const featured = posts.find(p => p.isFeatured);
     if (featured) return featured;
+    
+    // 2. Fallback to the first post in the dynamic list
     if (posts.length > 0) return posts[0];
+    
+    // 3. Ultimate fallback to the hardcoded file (prevents white screen crash)
     return INITIAL_POSTS[0];
   }, [posts]);
   
@@ -77,26 +97,22 @@ const App: React.FC = () => {
 
   const handleAdminLogin = () => {
     if (isAdmin) {
-      // Logout logic
       const confirmLogout = window.confirm("Terminate Admin Session?");
       if (confirmLogout) setIsAdmin(false);
       return;
     }
 
-    // Login logic
     const password = window.prompt("ENTER COMMAND CODE (Hint: nerdx)");
     if (password && password.toLowerCase() === 'nerdx') {
       setIsAdmin(true);
-      // Give the user immediate feedback
-      alert("ACCESS GRANTED.\n\nEditor Mode Initialized.\nLook for the orange [+] button in the bottom right corner to add new intel.");
+      alert("ACCESS GRANTED.\n\nEditor Mode Initialized.");
     } else {
-      if (password !== null) { // Only alert if they typed something and didn't hit cancel
-        alert("ACCESS DENIED. INVALID CREDENTIALS.");
+      if (password !== null) {
+        alert("ACCESS DENIED.");
       }
     }
   };
 
-  // Guard clause - if for some reason no data loads
   if (!featuredPost) {
     return (
       <div className="min-h-screen bg-black text-white flex items-center justify-center font-mono animate-pulse">
@@ -105,7 +121,6 @@ const App: React.FC = () => {
     );
   }
 
-  // Determine if editor is active
   const isEditorActive = editingPost !== undefined;
 
   return (
@@ -131,7 +146,6 @@ const App: React.FC = () => {
           />
         ) : (
           <>
-            {/* Featured Hero Section */}
             <section 
               className="relative w-full h-[75vh] min-h-[500px] flex items-end cursor-pointer group overflow-hidden border-b border-zinc-800"
               onClick={() => handlePostClick(featuredPost)}
@@ -144,10 +158,8 @@ const App: React.FC = () => {
                 />
               </div>
               
-              {/* Refined Cinematic Gradients */}
               <div className="absolute inset-0 bg-gradient-to-t from-[#050505] via-[#050505]/60 to-transparent opacity-90"></div>
               
-              {/* Content */}
               <div className="relative z-10 max-w-7xl mx-auto w-full px-6 pb-16">
                 <div className="max-w-5xl animate-in fade-in slide-in-from-bottom-8 duration-1000">
                   <div className="flex items-center gap-4 mb-6">
@@ -176,7 +188,6 @@ const App: React.FC = () => {
               </div>
             </section>
 
-            {/* Filter Bar */}
             <div className="sticky top-[73px] z-40 bg-[#050505]/95 backdrop-blur-md border-b border-zinc-800">
               <div className="max-w-7xl mx-auto px-6 py-4 flex overflow-x-auto no-scrollbar gap-8">
                 {(['All', 'Books & Comics', 'Games', 'Movies'] as Category[]).map((cat) => (
@@ -195,7 +206,6 @@ const App: React.FC = () => {
               </div>
             </div>
 
-            {/* Main Grid */}
             <div className="max-w-7xl mx-auto px-6 py-12">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-12">
                 {filteredPosts.map((post) => (
@@ -234,7 +244,6 @@ const App: React.FC = () => {
         </div>
       </footer>
 
-      {/* Admin Editor Modal - Higher Z-Index */}
       {isEditorActive && (
         <Editor 
           post={editingPost} 
@@ -243,8 +252,6 @@ const App: React.FC = () => {
         />
       )}
       
-      {/* Floating Action Button for Admin to create new post */}
-      {/* Only show if Admin is TRUE, Editor is CLOSED (undefined), and NOT reading a post */}
       {isAdmin && !isEditorActive && !selectedPost && (
         <button
           onClick={() => setEditingPost(null)}
