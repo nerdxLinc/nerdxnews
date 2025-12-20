@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import Header from './components/Header';
 import PostCard from './components/PostCard';
 import PostDetail from './components/PostDetail';
@@ -8,58 +8,60 @@ import { Post, Category } from './types';
 import { INITIAL_POSTS } from './constants';
 
 const App: React.FC = () => {
-  // CRITICAL UPDATE: Changed key to 'nerdxnews_production_build_v1'
-  // This invalidates the previous cache and forces the browser to load
-  // the articles currently listed in your constants.tsx file.
   const STORAGE_KEY = 'nerdxnews_production_build_v1';
 
-  // Accept both legacy and current featured flag spellings
   const isFeaturedFlag = (p: any) => Boolean(p?.IsFeatured ?? p?.isFeatured);
 
-  // Normalize image paths:
-  // - If it's a URL, keep it
-  // - If it's a filename or relative, assume it's in /images/
   const normalizeImagePath = (src?: string) => {
     if (!src) return undefined;
-    if (src.startsWith('http')) return src;
-    if (src.startsWith('/')) return src; // already absolute like /images/foo.jpg
-    return `/images/${src}`; // treat as filename
+    let s = String(src).trim();
+    if (!s) return undefined;
+
+    s = s.replace(/\\/g, '/');
+    if (s.startsWith('/public/')) s = s.replace(/^\/public\//, '/');
+
+    if (s.startsWith('http://') || s.startsWith('https://')) return encodeURI(s);
+    if (s.startsWith('/')) return encodeURI(s);
+    return encodeURI(`/images/${s}`);
   };
 
-  // Parse YYYY-MM-DD dates safely; fallback to 0
-  const dateToNumber = (d?: string) => {
-    if (!d) return 0;
-    const t = Date.parse(d);
-    return Number.isFinite(t) ? t : 0;
+  const seedIds = useMemo(() => new Set(INITIAL_POSTS.map(p => p.id)), []);
+
+  const looksLikePostsArray = (value: unknown): value is any[] => {
+    return (
+      Array.isArray(value) &&
+      value.some(item =>
+        item &&
+        typeof item === 'object' &&
+        typeof (item as any).title === 'string' &&
+        (typeof (item as any).content === 'string' || typeof (item as any).excerpt === 'string')
+      )
+    );
   };
 
-  const [posts, setPosts] = useState<Post[]>(() => {
+  const loadPostsFromLocalStorage = (): Post[] => {
     if (typeof window === 'undefined') return INITIAL_POSTS;
+
     try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-
-        // Merge strategy:
-        // 1. Load what is in constants.tsx (your hardcoded articles)
-        // 2. Add any NEW posts created via the Admin Editor that are saved in local storage
-        // This ensures your hardcoded articles NEVER disappear.
-        const savedIds = new Set(parsed.map((p: Post) => p.id));
-        const missingPosts = INITIAL_POSTS.filter(p => !savedIds.has(p.id));
-
-        if (missingPosts.length > 0) {
-          // Put hardcoded posts first, then saved user posts
-          return [...missingPosts, ...parsed];
+      const current = localStorage.getItem(STORAGE_KEY);
+      if (current) {
+        const parsed = JSON.parse(current);
+        if (looksLikePostsArray(parsed) && parsed.length > 0) {
+          const savedIds = new Set(parsed.map((p: Post) => p.id));
+          const missingSeed = INITIAL_POSTS.filter(p => !savedIds.has(p.id));
+          return [...parsed, ...missingSeed];
         }
-        return parsed.length > 0 ? parsed : INITIAL_POSTS;
       }
-      // If no save found (first visit for this version), load the hardcoded list
+
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(INITIAL_POSTS));
       return INITIAL_POSTS;
     } catch (e) {
-      console.error("Failed to load posts", e);
+      console.error('Failed to load posts', e);
       return INITIAL_POSTS;
     }
-  });
+  };
+
+  const [posts, setPosts] = useState<Post[]>(loadPostsFromLocalStorage);
 
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
   const [activeCategory, setActiveCategory] = useState<Category>('All');
@@ -71,37 +73,35 @@ const App: React.FC = () => {
       try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(posts));
       } catch (e) {
-        console.error("Failed to save posts", e);
+        console.error('Failed to save posts', e);
       }
     }
   }, [posts]);
 
-  // ✅ HERO SELECTION: choose from ALL posts, not filteredPosts
-  // Priority:
-  // 1) explicit featured flag
-  // 2) newest by date
   const featuredPost = useMemo(() => {
     if (!posts || posts.length === 0) return INITIAL_POSTS[0];
 
-    const featured = posts.find(p => isFeaturedFlag(p));
-    if (featured) return featured;
+    const explicit = posts.find(p => isFeaturedFlag(p));
+    if (explicit) return explicit;
 
-    // fall back to newest by date (prevents "welcome post always first" syndrome)
-    const sorted = [...posts].sort((a, b) => dateToNumber(b.date) - dateToNumber(a.date));
-    return sorted[0] || INITIAL_POSTS[0];
-  }, [posts]);
+    const nonSeed = posts.filter(p => !seedIds.has(p.id));
+    if (nonSeed.length > 0) {
+      const sorted = [...nonSeed].sort((a, b) => {
+        const at = Date.parse(a.date || '');
+        const bt = Date.parse(b.date || '');
+        return (Number.isFinite(bt) ? bt : 0) - (Number.isFinite(at) ? at : 0);
+      });
+      return sorted[0];
+    }
 
-  // ✅ GRID LIST: start from posts excluding hero & selected, then apply category filter
+    return posts[0] || INITIAL_POSTS[0];
+  }, [posts, seedIds]);
+
   const gridPosts = useMemo(() => {
     let list = posts;
 
-    if (featuredPost) {
-      list = list.filter(p => p.id !== featuredPost.id);
-    }
-
-    if (selectedPost) {
-      list = list.filter(p => p.id !== selectedPost.id);
-    }
+    if (featuredPost) list = list.filter(p => p.id !== featuredPost.id);
+    if (selectedPost) list = list.filter(p => p.id !== selectedPost.id);
 
     if (activeCategory !== 'All') {
       list = list.filter(p => p.category === activeCategory);
@@ -112,13 +112,11 @@ const App: React.FC = () => {
 
   const handleSavePost = (updatedPost: Post) => {
     setPosts(prev => {
-      // Upsert the post
       const exists = prev.find(p => p.id === updatedPost.id);
       let next = exists
         ? prev.map(p => (p.id === updatedPost.id ? updatedPost : p))
         : [updatedPost, ...prev];
 
-      // If user marked this post as Featured, ensure it is the ONLY featured post
       if (isFeaturedFlag(updatedPost)) {
         next = next.map(p =>
           p.id === updatedPost.id
@@ -126,7 +124,6 @@ const App: React.FC = () => {
             : { ...p, IsFeatured: false, isFeatured: false }
         );
 
-        // Also make sure it appears first in the list (front page lead story)
         next = [
           next.find(p => p.id === updatedPost.id)!,
           ...next.filter(p => p.id !== updatedPost.id),
@@ -148,19 +145,17 @@ const App: React.FC = () => {
 
   const handleAdminLogin = () => {
     if (isAdmin) {
-      const confirmLogout = window.confirm("Terminate Admin Session?");
+      const confirmLogout = window.confirm('Terminate Admin Session?');
       if (confirmLogout) setIsAdmin(false);
       return;
     }
 
-    const password = window.prompt("ENTER COMMAND CODE (Hint: nerdx)");
+    const password = window.prompt('ENTER COMMAND CODE (Hint: nerdx)');
     if (password && password.toLowerCase() === 'nerdx') {
       setIsAdmin(true);
-      alert("ACCESS GRANTED.\n\nEditor Mode Initialized.");
+      alert('ACCESS GRANTED.\n\nEditor Mode Initialized.');
     } else {
-      if (password !== null) {
-        alert("ACCESS DENIED.");
-      }
+      if (password !== null) alert('ACCESS DENIED.');
     }
   };
 
@@ -175,13 +170,18 @@ const App: React.FC = () => {
   const isEditorActive = editingPost !== undefined;
 
   const heroImage =
+    normalizeImagePath((featuredPost as any).heroImage) ||
     normalizeImagePath((featuredPost as any).imageUrl) ||
     normalizeImagePath((featuredPost as any).image) ||
-    normalizeImagePath((featuredPost as any).heroImage) ||
-    "/images/Alpha-core.jpg"; // ✅ local fallback you control
+    normalizeImagePath('/images/Alpha-core.jpg') ||
+    'https://picsum.photos/seed/nerdxhero/1600/900';
 
   return (
-    <div className={`min-h-screen flex flex-col selection:bg-orange-500 selection:text-white bg-[#050505] ${isAdmin ? 'border-t-4 border-orange-600' : ''}`}>
+    <div
+      className={`min-h-screen flex flex-col selection:bg-orange-500 selection:text-white bg-[#050505] ${
+        isAdmin ? 'border-t-4 border-orange-600' : ''
+      }`}
+    >
       {isAdmin && (
         <div className="fixed bottom-4 left-4 z-[50] bg-orange-600 text-white text-[10px] font-black px-4 py-2 tracking-widest uppercase shadow-lg border border-white/20 pointer-events-none">
           EDITOR MODE ACTIVE
@@ -189,18 +189,17 @@ const App: React.FC = () => {
       )}
 
       <Header
-        onHome={() => { setSelectedPost(null); setActiveCategory('All'); }}
+        onHome={() => {
+          setSelectedPost(null);
+          setActiveCategory('All');
+        }}
         onAdminToggle={handleAdminLogin}
         isAdmin={isAdmin}
       />
 
       <main className="flex-1 relative">
         {selectedPost ? (
-          <PostDetail
-            post={selectedPost}
-            onBack={() => setSelectedPost(null)}
-            isAdmin={isAdmin}
-          />
+          <PostDetail post={selectedPost} onBack={() => setSelectedPost(null)} isAdmin={isAdmin} />
         ) : (
           <>
             {/* Featured Hero Section */}
@@ -213,6 +212,13 @@ const App: React.FC = () => {
                   src={heroImage}
                   alt={featuredPost.title}
                   className="w-full h-full object-cover opacity-70 group-hover:opacity-80 group-hover:scale-105 transition-all duration-[1.5s] ease-out"
+                  onError={(e) => {
+                    const el = e.currentTarget as HTMLImageElement;
+                    console.error('Hero image failed to load:', el.src);
+
+                    const fallback = normalizeImagePath('/images/Alpha-core.jpg');
+                    if (fallback && el.src !== fallback) el.src = fallback;
+                  }}
                 />
               </div>
 
@@ -260,10 +266,9 @@ const App: React.FC = () => {
                   <button
                     key={cat}
                     onClick={() => setActiveCategory(cat)}
-                    className={`whitespace-nowrap text-[9px] md:text-[10px] font-black uppercase tracking-[0.2em] transition-all flex-shrink-0 ${activeCategory === cat
-                      ? 'text-orange-600 scale-105'
-                      : 'text-zinc-500 hover:text-white'
-                      }`}
+                    className={`whitespace-nowrap text-[9px] md:text-[10px] font-black uppercase tracking-[0.2em] transition-all flex-shrink-0 ${
+                      activeCategory === cat ? 'text-orange-600 scale-105' : 'text-zinc-500 hover:text-white'
+                    }`}
                   >
                     {cat === 'All' ? '/// All Feeds' : cat}
                   </button>
@@ -294,14 +299,24 @@ const App: React.FC = () => {
       <footer className="border-t border-zinc-800 bg-black py-12 px-6">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-8">
           <div className="flex flex-col gap-2 text-center md:text-left">
-            <span className="text-2xl font-['Orbitron'] font-black text-white tracking-tighter">NERD<span className="text-orange-600">X</span>NEWS</span>
-            <span className="text-[10px] text-zinc-600 uppercase tracking-widest">Est. 2024 /// The Resistance</span>
+            <span className="text-2xl font-['Orbitron'] font-black text-white tracking-tighter">
+              NERD<span className="text-orange-600">X</span>NEWS
+            </span>
+            <span className="text-[10px] text-zinc-600 uppercase tracking-widest">
+              Est. 2024 /// The Resistance
+            </span>
           </div>
 
           <div className="flex flex-wrap justify-center gap-6 md:gap-8 text-[10px] font-bold text-zinc-500 uppercase tracking-widest">
-            <a href="#" className="hover:text-orange-600 transition-colors">Manifesto</a>
-            <a href="#" className="hover:text-orange-600 transition-colors">Encrypted Comms</a>
-            <a href="#" className="hover:text-orange-600 transition-colors">Support</a>
+            <a href="#" className="hover:text-orange-600 transition-colors">
+              Manifesto
+            </a>
+            <a href="#" className="hover:text-orange-600 transition-colors">
+              Encrypted Comms
+            </a>
+            <a href="#" className="hover:text-orange-600 transition-colors">
+              Support
+            </a>
           </div>
 
           <div className="text-[10px] text-zinc-700 font-mono text-center md:text-right">
@@ -311,11 +326,7 @@ const App: React.FC = () => {
       </footer>
 
       {isEditorActive && (
-        <Editor
-          post={editingPost}
-          onSave={handleSavePost}
-          onClose={() => setEditingPost(undefined)}
-        />
+        <Editor post={editingPost} onSave={handleSavePost} onClose={() => setEditingPost(undefined)} />
       )}
 
       {isAdmin && !isEditorActive && !selectedPost && (
@@ -324,7 +335,9 @@ const App: React.FC = () => {
           className="fixed bottom-6 right-6 z-[100] bg-orange-600 text-white w-14 h-14 md:w-16 md:h-16 flex items-center justify-center shadow-[4px_4px_0_0_#fff] hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px] transition-all border-2 border-white group"
           aria-label="Create New Article"
         >
-          <span className="text-3xl md:text-4xl font-black group-hover:rotate-90 transition-transform">+</span>
+          <span className="text-3xl md:text-4xl font-black group-hover:rotate-90 transition-transform">
+            +
+          </span>
         </button>
       )}
     </div>
@@ -332,4 +345,3 @@ const App: React.FC = () => {
 };
 
 export default App;
-
