@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Post } from '../types';
 
 type Props = {
@@ -14,28 +14,118 @@ const normalizeImagePath = (src?: string) => {
   return `/images/${src}`;
 };
 
+// Legacy-tolerant field pickers (keeps PostDetail resilient to older JSON shapes)
+const pickExcerpt = (p: any): string => {
+  return String(
+    p?.excerpt ??
+      p?.blurb ??
+      p?.summary ??
+      p?.dek ??
+      p?.description ??
+      ''
+  ).trim();
+};
+
+const pickContent = (p: any): string => {
+  return String(
+    p?.content ??
+      p?.body ??
+      p?.story ??
+      p?.article ??
+      p?.text ??
+      ''
+  );
+};
+
+const pickDate = (p: any): string => {
+  return String(
+    p?.date ??
+      p?.publishedAt ??
+      p?.publishDate ??
+      p?.createdAt ??
+      ''
+  ).trim();
+};
+
+const pickCategory = (p: any): string => {
+  return String(p?.category ?? p?.section ?? '').trim();
+};
+
+const pickSlug = (p: any): string => {
+  return String(p?.slug ?? p?.path ?? p?.permalink ?? '').trim();
+};
+
 const PostDetail: React.FC<Props> = ({ post, onBack, isAdmin }) => {
+  const [copied, setCopied] = useState(false);
+
   const heroImage = useMemo(() => {
-    // Support multiple legacy names
     return (
       normalizeImagePath((post as any).heroImage) ||
       normalizeImagePath((post as any).imageUrl) ||
       normalizeImagePath((post as any).image) ||
+      normalizeImagePath((post as any).coverImage) ||
+      normalizeImagePath((post as any).hero) ||
       undefined
     );
   }, [post]);
 
+  const excerpt = useMemo(() => pickExcerpt(post as any), [post]);
+  const metaDate = useMemo(() => pickDate(post as any), [post]);
+  const metaCategory = useMemo(() => pickCategory(post as any), [post]);
+
   const paragraphs = useMemo(() => {
-    const raw = (post as any).content ?? '';
+    const raw = pickContent(post as any);
     if (!raw || typeof raw !== 'string') return [];
 
-    // Split into paragraphs on blank lines
     return raw
       .replace(/\r\n/g, '\n')
+      .trim()
       .split(/\n{2,}/g)
-      .map(p => p.trim())
+      .map((p) => p.trim())
       .filter(Boolean);
   }, [post]);
+
+  const shareUrl = useMemo(() => {
+    if (typeof window === 'undefined') return '';
+    const origin = window.location.origin;
+    const slug = pickSlug(post as any);
+    return slug ? `${origin}/articles/${slug}` : window.location.href;
+  }, [post]);
+
+  const copyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1200);
+    } catch {
+      // fallback
+      const ta = document.createElement('textarea');
+      ta.value = shareUrl;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1200);
+    }
+  };
+
+  const shareNative = async () => {
+    const nav: any = navigator;
+    if (nav.share) {
+      try {
+        await nav.share({
+          title: post.title,
+          text: excerpt || '',
+          url: shareUrl,
+        });
+        return;
+      } catch {
+        // user canceled or blocked — fall through to copy
+      }
+    }
+    await copyLink();
+  };
 
   return (
     <article className="min-h-[calc(100vh-140px)] bg-[#050505] text-white">
@@ -50,11 +140,31 @@ const PostDetail: React.FC<Props> = ({ post, onBack, isAdmin }) => {
             <span className="text-lg leading-none">←</span> Back to Feed
           </button>
 
-          {isAdmin && (
-            <span className="text-[10px] font-black uppercase tracking-[0.2em] text-orange-500">
-              Admin View
-            </span>
-          )}
+          <div className="flex items-center gap-2 md:gap-3">
+            <button
+              type="button"
+              onClick={copyLink}
+              className="inline-flex items-center justify-center px-3 py-2 md:px-4 md:py-2 text-[10px] md:text-[11px] font-black uppercase tracking-[0.2em] bg-zinc-900 border border-zinc-700 hover:border-orange-600 hover:text-orange-400 transition-colors"
+              title="Copy article link"
+            >
+              {copied ? 'Copied' : 'Copy Link'}
+            </button>
+
+            <button
+              type="button"
+              onClick={shareNative}
+              className="inline-flex items-center justify-center px-3 py-2 md:px-4 md:py-2 text-[10px] md:text-[11px] font-black uppercase tracking-[0.2em] bg-white text-black hover:bg-orange-600 hover:text-white transition-colors"
+              title="Share"
+            >
+              Share
+            </button>
+
+            {isAdmin && (
+              <span className="hidden md:inline text-[10px] font-black uppercase tracking-[0.2em] text-orange-500">
+                Admin View
+              </span>
+            )}
+          </div>
         </div>
       </div>
 
@@ -68,7 +178,6 @@ const PostDetail: React.FC<Props> = ({ post, onBack, isAdmin }) => {
                 alt={post.title}
                 className="w-full h-[240px] md:h-[420px] object-cover opacity-90"
                 onError={(e) => {
-                  // If the image is missing, hide the broken element cleanly
                   (e.currentTarget as HTMLImageElement).style.display = 'none';
                 }}
               />
@@ -84,21 +193,27 @@ const PostDetail: React.FC<Props> = ({ post, onBack, isAdmin }) => {
           <span className="px-3 py-1 bg-orange-600/90 text-white text-[9px] font-black tracking-[0.2em] uppercase">
             Field Intel
           </span>
-          <span className="text-zinc-400 text-[10px] font-mono uppercase tracking-widest">
-            {post.date}
-          </span>
-          <span className="text-zinc-600 text-[10px] font-mono uppercase tracking-widest">
-            {post.category}
-          </span>
+
+          {metaDate ? (
+            <span className="text-zinc-400 text-[10px] font-mono uppercase tracking-widest">
+              {metaDate}
+            </span>
+          ) : null}
+
+          {metaCategory ? (
+            <span className="text-zinc-600 text-[10px] font-mono uppercase tracking-widest">
+              {metaCategory}
+            </span>
+          ) : null}
         </div>
 
         <h1 className="text-3xl md:text-5xl font-black uppercase italic leading-[0.95] tracking-tight text-white drop-shadow-2xl">
           {post.title}
         </h1>
 
-        {post.excerpt && (
+        {!!excerpt && (
           <p className="mt-6 text-base md:text-xl text-zinc-200 leading-relaxed font-medium pl-4 border-l-2 border-orange-600">
-            {post.excerpt}
+            {excerpt}
           </p>
         )}
       </div>
@@ -115,7 +230,8 @@ const PostDetail: React.FC<Props> = ({ post, onBack, isAdmin }) => {
           </div>
         ) : (
           <p className="text-zinc-500 text-sm font-mono">
-            No article body found. (The post has no <code>content</code> field.)
+            No article body found. (The post has no recognized body field like{' '}
+            <code>content</code>, <code>body</code>, or <code>story</code>.)
           </p>
         )}
       </div>

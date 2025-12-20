@@ -1,73 +1,113 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
+
 import Header from './components/Header';
 import PostCard from './components/PostCard';
 import PostDetail from './components/PostDetail';
 import Newsletter from './components/Newsletter';
 import Editor from './components/Editor';
+
 import { Post, Category } from './types';
 import { INITIAL_POSTS } from './constants';
 
-const App: React.FC = () => {
-  const STORAGE_KEY = 'nerdxnews_production_build_v1';
+type AppProps = {
+  routeSlug?: string;
+};
 
-  const isFeaturedFlag = (p: any) => Boolean(p?.IsFeatured ?? p?.isFeatured);
+const STORAGE_KEY = 'nerdxnews_production_build_v1';
 
-  const normalizeImagePath = (src?: string) => {
-    if (!src) return undefined;
-    let s = String(src).trim();
-    if (!s) return undefined;
+// Accept both legacy and current featured flag spellings
+const isFeaturedFlag = (p: any) => Boolean(p?.IsFeatured ?? p?.isFeatured);
 
-    s = s.replace(/\\/g, '/');
-    if (s.startsWith('/public/')) s = s.replace(/^\/public\//, '/');
+const slugify = (input: string) => {
+  return (input || '')
+    .toLowerCase()
+    .trim()
+    .replace(/['"]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 90);
+};
 
-    if (s.startsWith('http://') || s.startsWith('https://')) return encodeURI(s);
-    if (s.startsWith('/')) return encodeURI(s);
-    return encodeURI(`/images/${s}`);
-  };
+const normalizeImagePath = (src?: string) => {
+  if (!src) return '';
+  if (src.startsWith('http')) return src;
+  if (src.startsWith('/')) return src;
+  return `/images/${src}`;
+};
 
-  const seedIds = useMemo(() => new Set(INITIAL_POSTS.map(p => p.id)), []);
+const pickHeroImage = (p: any): string => {
+  return (
+    normalizeImagePath(p?.imageUrl) ||
+    normalizeImagePath(p?.image) ||
+    normalizeImagePath(p?.heroImage) ||
+    normalizeImagePath(p?.coverImage) ||
+    normalizeImagePath(p?.hero) ||
+    ''
+  );
+};
 
-  const looksLikePostsArray = (value: unknown): value is any[] => {
-    return (
-      Array.isArray(value) &&
-      value.some(item =>
-        item &&
-        typeof item === 'object' &&
-        typeof (item as any).title === 'string' &&
-        (typeof (item as any).content === 'string' || typeof (item as any).excerpt === 'string')
-      )
-    );
-  };
+const pickExcerpt = (p: any): string => {
+  return String(
+    p?.excerpt ??
+      p?.blurb ??
+      p?.summary ??
+      p?.dek ??
+      p?.description ??
+      ''
+  ).trim();
+};
 
-  const loadPostsFromLocalStorage = (): Post[] => {
-    if (typeof window === 'undefined') return INITIAL_POSTS;
+const ensureSlugs = (list: Post[]) => {
+  const used = new Set<string>();
+  return list.map((p) => {
+    let base = (p as any).slug ? String((p as any).slug) : slugify(p.title);
+    if (!base) base = `post-${p.id}`;
+
+    let s = base;
+    let n = 2;
+    while (used.has(s)) {
+      s = `${base}-${n++}`;
+    }
+    used.add(s);
+
+    return { ...p, slug: s };
+  });
+};
+
+const App: React.FC<AppProps> = ({ routeSlug }) => {
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  const [posts, setPosts] = useState<Post[]>(() => {
+    if (typeof window === 'undefined') return ensureSlugs(INITIAL_POSTS);
 
     try {
-      const current = localStorage.getItem(STORAGE_KEY);
-      if (current) {
-        const parsed = JSON.parse(current);
-        if (looksLikePostsArray(parsed) && parsed.length > 0) {
-          const savedIds = new Set(parsed.map((p: Post) => p.id));
-          const missingSeed = INITIAL_POSTS.filter(p => !savedIds.has(p.id));
-          return [...parsed, ...missingSeed];
-        }
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved) as Post[];
+
+        // Merge: constants first (never disappear), then saved posts
+        const savedIds = new Set(parsed.map((p: Post) => p.id));
+        const missingPosts = INITIAL_POSTS.filter((p) => !savedIds.has(p.id));
+        const merged = missingPosts.length > 0 ? [...missingPosts, ...parsed] : parsed;
+
+        return ensureSlugs(merged.length > 0 ? merged : INITIAL_POSTS);
       }
 
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(INITIAL_POSTS));
-      return INITIAL_POSTS;
+      return ensureSlugs(INITIAL_POSTS);
     } catch (e) {
       console.error('Failed to load posts', e);
-      return INITIAL_POSTS;
+      return ensureSlugs(INITIAL_POSTS);
     }
-  };
-
-  const [posts, setPosts] = useState<Post[]>(loadPostsFromLocalStorage);
+  });
 
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
   const [activeCategory, setActiveCategory] = useState<Category>('All');
   const [isAdmin, setIsAdmin] = useState(false);
   const [editingPost, setEditingPost] = useState<Post | null | undefined>(undefined);
 
+  // Persist posts
   useEffect(() => {
     if (typeof window !== 'undefined') {
       try {
@@ -78,68 +118,115 @@ const App: React.FC = () => {
     }
   }, [posts]);
 
-  const featuredPost = useMemo(() => {
-    if (!posts || posts.length === 0) return INITIAL_POSTS[0];
-
-    const explicit = posts.find(p => isFeaturedFlag(p));
-    if (explicit) return explicit;
-
-    const nonSeed = posts.filter(p => !seedIds.has(p.id));
-    if (nonSeed.length > 0) {
-      const sorted = [...nonSeed].sort((a, b) => {
-        const at = Date.parse(a.date || '');
-        const bt = Date.parse(b.date || '');
-        return (Number.isFinite(bt) ? bt : 0) - (Number.isFinite(at) ? at : 0);
-      });
-      return sorted[0];
+  // If the URL is /articles/:slug, select that post.
+  // If URL is /, clear selection.
+  useEffect(() => {
+    if (routeSlug) {
+      const found = posts.find((p) => (p.slug || slugify(p.title)) === routeSlug);
+      if (found) {
+        setSelectedPost(found);
+      } else {
+        setSelectedPost({
+          id: '__not_found__',
+          title: 'Article Not Found',
+          excerpt: 'That link does not match any published article on this build.',
+          content:
+            'This can happen if the article exists only in local storage on another device, or the slug was changed.\n\nReturn to the feed and open the article again, then copy the link from the article page.',
+          date: new Date().toISOString().split('T')[0],
+          category: 'Tech' as any,
+          slug: routeSlug,
+        } as Post);
+      }
+    } else {
+      // If user is on "/" (or any non-article route), show feed
+      if (location.pathname === '/' || location.pathname === '') {
+        setSelectedPost(null);
+      }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [routeSlug, posts]);
 
-    return posts[0] || INITIAL_POSTS[0];
-  }, [posts, seedIds]);
-
-  const gridPosts = useMemo(() => {
-    let list = posts;
-
-    if (featuredPost) list = list.filter(p => p.id !== featuredPost.id);
-    if (selectedPost) list = list.filter(p => p.id !== selectedPost.id);
-
+  const filteredPosts = useMemo(() => {
+    let list = posts.filter((p) => p.id !== (selectedPost?.id || ''));
     if (activeCategory !== 'All') {
-      list = list.filter(p => p.category === activeCategory);
+      list = list.filter((p) => p.category === activeCategory);
     }
-
     return list;
-  }, [posts, featuredPost, selectedPost, activeCategory]);
+  }, [posts, activeCategory, selectedPost]);
 
+  // Choose the featured post from the current view; fall back safely
+  const featuredPost = useMemo(() => {
+    const featured = filteredPosts.find((p) => isFeaturedFlag(p));
+    if (featured) return featured;
+
+    if (filteredPosts.length > 0) return filteredPosts[0];
+    if (posts.length > 0) return posts[0];
+
+    return ensureSlugs(INITIAL_POSTS)[0];
+  }, [filteredPosts, posts]);
+
+  // Prevent duplication: remove hero post from the grid list
+  const gridPosts = useMemo(() => {
+    if (!featuredPost) return filteredPosts;
+    return filteredPosts.filter((p) => p.id !== featuredPost.id);
+  }, [filteredPosts, featuredPost]);
+
+  const goToPost = (post: Post) => {
+    const slug = post.slug || slugify(post.title) || `post-${post.id}`;
+    setSelectedPost(post);
+    navigate(`/articles/${slug}`);
+    if (typeof window !== 'undefined') {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
+
+  // FINAL: Navigate using the FINAL post after ensureSlugs() (and featured reordering)
   const handleSavePost = (updatedPost: Post) => {
-    setPosts(prev => {
-      const exists = prev.find(p => p.id === updatedPost.id);
-      let next = exists
-        ? prev.map(p => (p.id === updatedPost.id ? updatedPost : p))
-        : [updatedPost, ...prev];
+    const normalized: Post = {
+      ...updatedPost,
+      slug:
+        updatedPost.slug && updatedPost.slug.trim().length > 0
+          ? slugify(updatedPost.slug)
+          : slugify(updatedPost.title),
+    };
 
-      if (isFeaturedFlag(updatedPost)) {
-        next = next.map(p =>
-          p.id === updatedPost.id
+    let finalSavedPost: Post | null = null;
+
+    setPosts((prev) => {
+      // Upsert
+      const exists = prev.find((p) => p.id === normalized.id);
+      let next = exists
+        ? prev.map((p) => (p.id === normalized.id ? normalized : p))
+        : [normalized, ...prev];
+
+      // Ensure slugs are present and unique
+      next = ensureSlugs(next);
+
+      // Capture the actual saved post AFTER ensureSlugs()
+      finalSavedPost = next.find((p) => p.id === normalized.id) || null;
+
+      // If marked Featured: make it the only featured post + move to top
+      if (isFeaturedFlag(normalized)) {
+        next = next.map((p) =>
+          p.id === normalized.id
             ? { ...p, IsFeatured: true, isFeatured: true }
             : { ...p, IsFeatured: false, isFeatured: false }
         );
 
-        next = [
-          next.find(p => p.id === updatedPost.id)!,
-          ...next.filter(p => p.id !== updatedPost.id),
-        ];
+        const hero = next.find((p) => p.id === normalized.id)!;
+        next = [hero, ...next.filter((p) => p.id !== normalized.id)];
+        finalSavedPost = hero;
       }
 
       return next;
     });
 
     setEditingPost(undefined);
-  };
 
-  const handlePostClick = (post: Post) => {
-    setSelectedPost(post);
-    if (typeof window !== 'undefined') {
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+    if (finalSavedPost) {
+      goToPost(finalSavedPost);
+    } else {
+      goToPost(normalized);
     }
   };
 
@@ -155,9 +242,22 @@ const App: React.FC = () => {
       setIsAdmin(true);
       alert('ACCESS GRANTED.\n\nEditor Mode Initialized.');
     } else {
-      if (password !== null) alert('ACCESS DENIED.');
+      if (password !== null) {
+        alert('ACCESS DENIED.');
+      }
     }
   };
+
+  const onHome = () => {
+    setSelectedPost(null);
+    setActiveCategory('All');
+    navigate('/');
+  };
+
+  const isEditorActive = editingPost !== undefined;
+
+  const heroImage = pickHeroImage(featuredPost as any) || '/images/Alpha-core.jpg';
+  const heroExcerpt = pickExcerpt(featuredPost as any);
 
   if (!featuredPost) {
     return (
@@ -166,15 +266,6 @@ const App: React.FC = () => {
       </div>
     );
   }
-
-  const isEditorActive = editingPost !== undefined;
-
-  const heroImage =
-    normalizeImagePath((featuredPost as any).heroImage) ||
-    normalizeImagePath((featuredPost as any).imageUrl) ||
-    normalizeImagePath((featuredPost as any).image) ||
-    normalizeImagePath('/images/Alpha-core.jpg') ||
-    'https://picsum.photos/seed/nerdxhero/1600/900';
 
   return (
     <div
@@ -188,24 +279,17 @@ const App: React.FC = () => {
         </div>
       )}
 
-      <Header
-        onHome={() => {
-          setSelectedPost(null);
-          setActiveCategory('All');
-        }}
-        onAdminToggle={handleAdminLogin}
-        isAdmin={isAdmin}
-      />
+      <Header onHome={onHome} onAdminToggle={handleAdminLogin} isAdmin={isAdmin} />
 
       <main className="flex-1 relative">
         {selectedPost ? (
-          <PostDetail post={selectedPost} onBack={() => setSelectedPost(null)} isAdmin={isAdmin} />
+          <PostDetail post={selectedPost} onBack={onHome} isAdmin={isAdmin} />
         ) : (
           <>
             {/* Featured Hero Section */}
             <section
               className="relative w-full h-[60vh] md:h-[75vh] min-h-[400px] md:min-h-[500px] flex items-end cursor-pointer group overflow-hidden border-b border-zinc-800"
-              onClick={() => handlePostClick(featuredPost)}
+              onClick={() => goToPost(featuredPost)}
             >
               <div className="absolute inset-0 bg-zinc-900 pointer-events-none">
                 <img
@@ -213,11 +297,7 @@ const App: React.FC = () => {
                   alt={featuredPost.title}
                   className="w-full h-full object-cover opacity-70 group-hover:opacity-80 group-hover:scale-105 transition-all duration-[1.5s] ease-out"
                   onError={(e) => {
-                    const el = e.currentTarget as HTMLImageElement;
-                    console.error('Hero image failed to load:', el.src);
-
-                    const fallback = normalizeImagePath('/images/Alpha-core.jpg');
-                    if (fallback && el.src !== fallback) el.src = fallback;
+                    (e.currentTarget as HTMLImageElement).style.display = 'none';
                   }}
                 />
               </div>
@@ -242,13 +322,13 @@ const App: React.FC = () => {
 
                   <div className="flex flex-col md:flex-row gap-6 md:gap-8 items-start md:items-center">
                     <p className="text-sm md:text-xl text-zinc-200 max-w-2xl leading-relaxed font-medium pl-4 border-l-2 border-orange-600 line-clamp-3 md:line-clamp-none">
-                      {featuredPost.excerpt}
+                      {heroExcerpt}
                     </p>
                     <button
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation();
-                        handlePostClick(featuredPost);
+                        goToPost(featuredPost);
                       }}
                       className="w-full md:w-auto whitespace-nowrap bg-white text-black px-6 py-3 md:px-8 md:py-4 font-black uppercase tracking-[0.2em] hover:bg-orange-600 hover:text-white transition-all shadow-[6px_6px_0_0_#000] hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px] text-xs md:text-sm"
                     >
@@ -283,7 +363,7 @@ const App: React.FC = () => {
                   <PostCard
                     key={post.id}
                     post={post}
-                    onClick={handlePostClick}
+                    onClick={() => goToPost(post)}
                     onEdit={isAdmin ? () => setEditingPost(post) : undefined}
                     isAdmin={isAdmin}
                   />
@@ -335,9 +415,7 @@ const App: React.FC = () => {
           className="fixed bottom-6 right-6 z-[100] bg-orange-600 text-white w-14 h-14 md:w-16 md:h-16 flex items-center justify-center shadow-[4px_4px_0_0_#fff] hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px] transition-all border-2 border-white group"
           aria-label="Create New Article"
         >
-          <span className="text-3xl md:text-4xl font-black group-hover:rotate-90 transition-transform">
-            +
-          </span>
+          <span className="text-3xl md:text-4xl font-black group-hover:rotate-90 transition-transform">+</span>
         </button>
       )}
     </div>
