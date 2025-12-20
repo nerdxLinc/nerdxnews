@@ -13,19 +13,40 @@ const App: React.FC = () => {
   // the articles currently listed in your constants.tsx file.
   const STORAGE_KEY = 'nerdxnews_production_build_v1';
 
+  // Accept both legacy and current featured flag spellings
+  const isFeaturedFlag = (p: any) => Boolean(p?.IsFeatured ?? p?.isFeatured);
+
+  // Normalize image paths:
+  // - If it's a URL, keep it
+  // - If it's a filename or relative, assume it's in /images/
+  const normalizeImagePath = (src?: string) => {
+    if (!src) return undefined;
+    if (src.startsWith('http')) return src;
+    if (src.startsWith('/')) return src; // already absolute like /images/foo.jpg
+    return `/images/${src}`; // treat as filename
+  };
+
+  // Parse YYYY-MM-DD dates safely; fallback to 0
+  const dateToNumber = (d?: string) => {
+    if (!d) return 0;
+    const t = Date.parse(d);
+    return Number.isFinite(t) ? t : 0;
+  };
+
   const [posts, setPosts] = useState<Post[]>(() => {
     if (typeof window === 'undefined') return INITIAL_POSTS;
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
+
         // Merge strategy:
         // 1. Load what is in constants.tsx (your hardcoded articles)
         // 2. Add any NEW posts created via the Admin Editor that are saved in local storage
         // This ensures your hardcoded articles NEVER disappear.
         const savedIds = new Set(parsed.map((p: Post) => p.id));
         const missingPosts = INITIAL_POSTS.filter(p => !savedIds.has(p.id));
-        
+
         if (missingPosts.length > 0) {
           // Put hardcoded posts first, then saved user posts
           return [...missingPosts, ...parsed];
@@ -39,11 +60,11 @@ const App: React.FC = () => {
       return INITIAL_POSTS;
     }
   });
-  
+
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
   const [activeCategory, setActiveCategory] = useState<Category>('All');
   const [isAdmin, setIsAdmin] = useState(false);
-  const [editingPost, setEditingPost] = useState<Post | null | undefined>(undefined); 
+  const [editingPost, setEditingPost] = useState<Post | null | undefined>(undefined);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -55,29 +76,41 @@ const App: React.FC = () => {
     }
   }, [posts]);
 
-  // Ensure featuredPost is never undefined by falling back multiple times
+  // ✅ HERO SELECTION: choose from ALL posts, not filteredPosts
+  // Priority:
+  // 1) explicit featured flag
+  // 2) newest by date
   const featuredPost = useMemo(() => {
-    // 1. Try to find a post marked explicitly as featured
-    const featured = posts.find(p => p.isFeatured);
+    if (!posts || posts.length === 0) return INITIAL_POSTS[0];
+
+    const featured = posts.find(p => isFeaturedFlag(p));
     if (featured) return featured;
-    
-    // 2. Fallback to the first post in the dynamic list
-    if (posts.length > 0) return posts[0];
-    
-    // 3. Ultimate fallback to the hardcoded file (prevents white screen crash)
-    return INITIAL_POSTS[0];
+
+    // fall back to newest by date (prevents "welcome post always first" syndrome)
+    const sorted = [...posts].sort((a, b) => dateToNumber(b.date) - dateToNumber(a.date));
+    return sorted[0] || INITIAL_POSTS[0];
   }, [posts]);
-  
-  const filteredPosts = useMemo(() => {
-    let list = posts.filter(p => p.id !== (selectedPost?.id || ''));
+
+  // ✅ GRID LIST: start from posts excluding hero & selected, then apply category filter
+  const gridPosts = useMemo(() => {
+    let list = posts;
+
+    if (featuredPost) {
+      list = list.filter(p => p.id !== featuredPost.id);
+    }
+
+    if (selectedPost) {
+      list = list.filter(p => p.id !== selectedPost.id);
+    }
+
     if (activeCategory !== 'All') {
       list = list.filter(p => p.category === activeCategory);
     }
-    return list;
-  }, [posts, activeCategory, selectedPost]);
 
-  
-const handleSavePost = (updatedPost: Post) => {
+    return list;
+  }, [posts, featuredPost, selectedPost, activeCategory]);
+
+  const handleSavePost = (updatedPost: Post) => {
     setPosts(prev => {
       // Upsert the post
       const exists = prev.find(p => p.id === updatedPost.id);
@@ -86,9 +119,11 @@ const handleSavePost = (updatedPost: Post) => {
         : [updatedPost, ...prev];
 
       // If user marked this post as Featured, ensure it is the ONLY featured post
-      if (updatedPost.isFeatured) {
+      if (isFeaturedFlag(updatedPost)) {
         next = next.map(p =>
-          p.id === updatedPost.id ? { ...p, isFeatured: true } : { ...p, isFeatured: false }
+          p.id === updatedPost.id
+            ? { ...p, IsFeatured: true, isFeatured: true }
+            : { ...p, IsFeatured: false, isFeatured: false }
         );
 
         // Also make sure it appears first in the list (front page lead story)
@@ -139,6 +174,12 @@ const handleSavePost = (updatedPost: Post) => {
 
   const isEditorActive = editingPost !== undefined;
 
+  const heroImage =
+    normalizeImagePath((featuredPost as any).imageUrl) ||
+    normalizeImagePath((featuredPost as any).image) ||
+    normalizeImagePath((featuredPost as any).heroImage) ||
+    "/images/Alpha-core.jpg"; // ✅ local fallback you control
+
   return (
     <div className={`min-h-screen flex flex-col selection:bg-orange-500 selection:text-white bg-[#050505] ${isAdmin ? 'border-t-4 border-orange-600' : ''}`}>
       {isAdmin && (
@@ -146,8 +187,8 @@ const handleSavePost = (updatedPost: Post) => {
           EDITOR MODE ACTIVE
         </div>
       )}
-      
-      <Header 
+
+      <Header
         onHome={() => { setSelectedPost(null); setActiveCategory('All'); }}
         onAdminToggle={handleAdminLogin}
         isAdmin={isAdmin}
@@ -155,28 +196,28 @@ const handleSavePost = (updatedPost: Post) => {
 
       <main className="flex-1 relative">
         {selectedPost ? (
-          <PostDetail 
-            post={selectedPost} 
-            onBack={() => setSelectedPost(null)} 
+          <PostDetail
+            post={selectedPost}
+            onBack={() => setSelectedPost(null)}
             isAdmin={isAdmin}
           />
         ) : (
           <>
             {/* Featured Hero Section */}
-            <section 
+            <section
               className="relative w-full h-[60vh] md:h-[75vh] min-h-[400px] md:min-h-[500px] flex items-end cursor-pointer group overflow-hidden border-b border-zinc-800"
               onClick={() => handlePostClick(featuredPost)}
             >
-              <div className="absolute inset-0 bg-zinc-900">
-                <img 
-                  src={featuredPost.imageUrl} 
-                  alt={featuredPost.title} 
+              <div className="absolute inset-0 bg-zinc-900 pointer-events-none">
+                <img
+                  src={heroImage}
+                  alt={featuredPost.title}
                   className="w-full h-full object-cover opacity-70 group-hover:opacity-80 group-hover:scale-105 transition-all duration-[1.5s] ease-out"
                 />
               </div>
-              
-              <div className="absolute inset-0 bg-gradient-to-t from-[#050505] via-[#050505]/60 to-transparent opacity-90"></div>
-              
+
+              <div className="absolute inset-0 bg-gradient-to-t from-[#050505] via-[#050505]/60 to-transparent opacity-90 pointer-events-none"></div>
+
               <div className="relative z-10 max-w-7xl mx-auto w-full px-4 md:px-6 pb-8 md:pb-16">
                 <div className="max-w-5xl animate-in fade-in slide-in-from-bottom-8 duration-1000">
                   <div className="flex items-center gap-4 mb-4 md:mb-6">
@@ -188,18 +229,24 @@ const handleSavePost = (updatedPost: Post) => {
                       {featuredPost.date}
                     </span>
                   </div>
-                  
-                  {/* Responsive typography: text-3xl on mobile, text-7xl on desktop */}
+
                   <h2 className="text-3xl md:text-6xl lg:text-7xl font-black mb-4 md:mb-6 leading-[0.95] tracking-tight uppercase italic text-white retro-glow title-stroke group-hover:text-yellow-400 transition-colors duration-500 drop-shadow-2xl">
                     {featuredPost.title}
                   </h2>
-                  
+
                   <div className="flex flex-col md:flex-row gap-6 md:gap-8 items-start md:items-center">
                     <p className="text-sm md:text-xl text-zinc-200 max-w-2xl leading-relaxed font-medium pl-4 border-l-2 border-orange-600 line-clamp-3 md:line-clamp-none">
                       {featuredPost.excerpt}
                     </p>
-                    <button className="w-full md:w-auto whitespace-nowrap bg-white text-black px-6 py-3 md:px-8 md:py-4 font-black uppercase tracking-[0.2em] hover:bg-orange-600 hover:text-white transition-all shadow-[6px_6px_0_0_#000] hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px] text-xs md:text-sm">
-                       Read Protocol &rarr;
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handlePostClick(featuredPost);
+                      }}
+                      className="w-full md:w-auto whitespace-nowrap bg-white text-black px-6 py-3 md:px-8 md:py-4 font-black uppercase tracking-[0.2em] hover:bg-orange-600 hover:text-white transition-all shadow-[6px_6px_0_0_#000] hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px] text-xs md:text-sm"
+                    >
+                      Read Protocol &rarr;
                     </button>
                   </div>
                 </div>
@@ -213,11 +260,10 @@ const handleSavePost = (updatedPost: Post) => {
                   <button
                     key={cat}
                     onClick={() => setActiveCategory(cat)}
-                    className={`whitespace-nowrap text-[9px] md:text-[10px] font-black uppercase tracking-[0.2em] transition-all flex-shrink-0 ${
-                      activeCategory === cat 
-                        ? 'text-orange-600 scale-105' 
-                        : 'text-zinc-500 hover:text-white'
-                    }`}
+                    className={`whitespace-nowrap text-[9px] md:text-[10px] font-black uppercase tracking-[0.2em] transition-all flex-shrink-0 ${activeCategory === cat
+                      ? 'text-orange-600 scale-105'
+                      : 'text-zinc-500 hover:text-white'
+                      }`}
                   >
                     {cat === 'All' ? '/// All Feeds' : cat}
                   </button>
@@ -228,10 +274,10 @@ const handleSavePost = (updatedPost: Post) => {
             {/* Main Grid */}
             <div className="max-w-7xl mx-auto px-4 md:px-6 py-8 md:py-12">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-12">
-                {filteredPosts.map((post) => (
-                  <PostCard 
-                    key={post.id} 
-                    post={post} 
+                {gridPosts.map((post) => (
+                  <PostCard
+                    key={post.id}
+                    post={post}
                     onClick={handlePostClick}
                     onEdit={isAdmin ? () => setEditingPost(post) : undefined}
                     isAdmin={isAdmin}
@@ -247,31 +293,31 @@ const handleSavePost = (updatedPost: Post) => {
 
       <footer className="border-t border-zinc-800 bg-black py-12 px-6">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-8">
-           <div className="flex flex-col gap-2 text-center md:text-left">
-             <span className="text-2xl font-['Orbitron'] font-black text-white tracking-tighter">NERD<span className="text-orange-600">X</span>NEWS</span>
-             <span className="text-[10px] text-zinc-600 uppercase tracking-widest">Est. 2024 /// The Resistance</span>
-           </div>
-           
-           <div className="flex flex-wrap justify-center gap-6 md:gap-8 text-[10px] font-bold text-zinc-500 uppercase tracking-widest">
-             <a href="#" className="hover:text-orange-600 transition-colors">Manifesto</a>
-             <a href="#" className="hover:text-orange-600 transition-colors">Encrypted Comms</a>
-             <a href="#" className="hover:text-orange-600 transition-colors">Support</a>
-           </div>
+          <div className="flex flex-col gap-2 text-center md:text-left">
+            <span className="text-2xl font-['Orbitron'] font-black text-white tracking-tighter">NERD<span className="text-orange-600">X</span>NEWS</span>
+            <span className="text-[10px] text-zinc-600 uppercase tracking-widest">Est. 2024 /// The Resistance</span>
+          </div>
 
-           <div className="text-[10px] text-zinc-700 font-mono text-center md:text-right">
-             © 2024 NERDXNEWS. SYSTEM SECURE.
-           </div>
+          <div className="flex flex-wrap justify-center gap-6 md:gap-8 text-[10px] font-bold text-zinc-500 uppercase tracking-widest">
+            <a href="#" className="hover:text-orange-600 transition-colors">Manifesto</a>
+            <a href="#" className="hover:text-orange-600 transition-colors">Encrypted Comms</a>
+            <a href="#" className="hover:text-orange-600 transition-colors">Support</a>
+          </div>
+
+          <div className="text-[10px] text-zinc-700 font-mono text-center md:text-right">
+            © 2024 NERDXNEWS. SYSTEM SECURE.
+          </div>
         </div>
       </footer>
 
       {isEditorActive && (
-        <Editor 
-          post={editingPost} 
+        <Editor
+          post={editingPost}
           onSave={handleSavePost}
           onClose={() => setEditingPost(undefined)}
         />
       )}
-      
+
       {isAdmin && !isEditorActive && !selectedPost && (
         <button
           onClick={() => setEditingPost(null)}
@@ -286,3 +332,4 @@ const handleSavePost = (updatedPost: Post) => {
 };
 
 export default App;
+
