@@ -1,30 +1,61 @@
-import React from "react";
+import React, { useMemo } from 'react';
+import { SOCIAL_LINKS } from '../constants';
+
+function stripTrailingSlashes(url: string): string {
+  return (url || '').trim().replace(/\/+$/, '');
+}
+
+function toSubstackSubscribeUrl(publicationUrl: string): string {
+  const clean = stripTrailingSlashes(publicationUrl);
+  if (!clean || clean === '#') return 'https://substack.com';
+  return `${clean}/subscribe`;
+}
 
 export default function Newsletter() {
-  return (
-    <section className="p-6 border rounded">
-      <h2 className="text-xl font-bold">Newsletter</h2>
-      <p className="mt-2 text-sm opacity-80">
-        Subscribe to get new posts in your inbox.
-      </p>
+  const publicationUrl = (SOCIAL_LINKS.newsletter || '').trim();
+  const subscribeUrl = useMemo(() => toSubstackSubscribeUrl(publicationUrl), [publicationUrl]);
 
-      <form
-        className="mt-4 flex gap-2"
-        onSubmit={(e) => {
-          e.preventDefault();
-          alert("Newsletter signup is a placeholder in this prototype.");
-        }}
-      >
-        <input
-          type="email"
-          required
-          placeholder="you@example.com"
-          className="flex-1 px-3 py-2 border rounded"
-        />
-        <button type="submit" className="px-4 py-2 border rounded">
-          Subscribe
-        </button>
-      </form>
+  return (
+    <section className="border-t border-zinc-800 bg-black">
+      <div className="max-w-7xl mx-auto px-4 md:px-6 py-12 md:py-16">
+        <div className="max-w-3xl">
+          <div className="text-orange-500 text-[10px] font-black tracking-[0.2em] uppercase mb-3">
+            Subscriber Uplink
+          </div>
+
+          <h3 className="text-2xl md:text-3xl font-black uppercase italic tracking-tight text-white leading-[1.05]">
+            Get Field Intel by Email
+          </h3>
+
+          <p className="mt-4 text-zinc-300 text-sm md:text-base leading-relaxed">
+            Subscribe via Substack. Same list, same delivery — NerdX stays the front door.
+          </p>
+
+          <div className="mt-6 flex flex-col sm:flex-row gap-3">
+            <a
+              href={subscribeUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center justify-center px-6 py-3 bg-orange-600 text-white font-black uppercase tracking-[0.2em] text-[10px] md:text-[11px] hover:bg-yellow-400 hover:text-black transition-colors shadow-[6px_6px_0_0_#000] hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px]"
+            >
+              Subscribe
+            </a>
+
+            <a
+              href={publicationUrl && publicationUrl !== '#' ? publicationUrl : 'https://substack.com'}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center justify-center px-6 py-3 bg-transparent border border-zinc-700 text-zinc-200 font-black uppercase tracking-[0.2em] text-[10px] md:text-[11px] hover:border-orange-600 hover:text-orange-400 transition-colors"
+            >
+              Read on Substack
+            </a>
+          </div>
+
+          <div className="mt-4 text-[11px] text-zinc-500 font-mono">
+            Subscriptions are handled on Substack (recommended for reliability).
+          </div>
+        </div>
+      </div>
     </section>
   );
 }
