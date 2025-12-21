@@ -7,7 +7,7 @@ function stripTrailingSlashes(url: string): string {
 
 function toSubstackSubscribeUrl(publicationUrl: string): string {
   const clean = stripTrailingSlashes(publicationUrl);
-  if (!clean || clean === '#') return 'https://substack.com';
+  if (!clean || clean === '#') return 'https://substack.com/subscribe';
   return `${clean}/subscribe`;
 }
 
@@ -31,7 +31,7 @@ export default function Newsletter() {
             Subscribe via Substack. Same list, same delivery — NerdX stays the front door.
           </p>
 
-          <div className="mt-6 flex flex-col sm:flex-row gap-3">
+          <div className="mt-6">
             <a
               href={subscribeUrl}
               target="_blank"
@@ -40,19 +40,10 @@ export default function Newsletter() {
             >
               Subscribe
             </a>
-
-            <a
-              href={publicationUrl && publicationUrl !== '#' ? publicationUrl : 'https://substack.com'}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center justify-center px-6 py-3 bg-transparent border border-zinc-700 text-zinc-200 font-black uppercase tracking-[0.2em] text-[10px] md:text-[11px] hover:border-orange-600 hover:text-orange-400 transition-colors"
-            >
-              Read on Substack
-            </a>
           </div>
 
           <div className="mt-4 text-[11px] text-zinc-500 font-mono">
-            Subscriptions are handled on Substack (recommended for reliability).
+            Opens Substack’s subscribe page in a new tab.
           </div>
         </div>
       </div>

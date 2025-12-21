@@ -1,5 +1,5 @@
 import React from 'react';
-import { LOGO_URL } from '../constants';
+import { LOGO_URL, SOCIAL_LINKS } from '../constants';
 
 interface HeaderProps {
   onHome: () => void;
@@ -7,19 +7,36 @@ interface HeaderProps {
   isAdmin: boolean;
 }
 
+function stripTrailingSlashes(url: string): string {
+  return (url || '').trim().replace(/\/+$/, '');
+}
+
+function toSubstackSubscribeUrl(publicationUrl: string): string {
+  const clean = stripTrailingSlashes(publicationUrl);
+  if (!clean || clean === '#') return 'https://substack.com/subscribe';
+  return `${clean}/subscribe`;
+}
+
 const Header: React.FC<HeaderProps> = ({ onHome, onAdminToggle, isAdmin }) => {
+  const subscribeUrl = toSubstackSubscribeUrl(SOCIAL_LINKS.newsletter);
+
+  const handleSubscribe = () => {
+    // Same-tab navigation = most reliable (no popup blocking)
+    window.location.href = subscribeUrl;
+  };
+
   return (
     <header className="sticky top-0 z-50 glass border-b-2 border-orange-500 px-6 py-8 md:py-10">
       <div className="max-w-7xl mx-auto flex flex-col lg:flex-row items-center justify-between gap-10">
-        <div 
+        <div
           className="flex items-center gap-8 cursor-pointer group flex-shrink-0"
           onClick={onHome}
         >
           <div className="relative flex-shrink-0">
             <div className="absolute -inset-2 bg-orange-500 blur opacity-20 group-hover:opacity-60 transition duration-1000 group-hover:duration-200"></div>
-            <img 
-              src={LOGO_URL} 
-              alt="NerdXNews Logo" 
+            <img
+              src={LOGO_URL}
+              alt="NerdXNews Logo"
               className="relative h-24 md:h-32 w-auto object-contain border-4 border-zinc-800 rounded-none group-hover:scale-105 transition-transform shadow-[8px_8px_0px_0px_rgba(255,87,34,1)]"
             />
           </div>
@@ -34,23 +51,43 @@ const Header: React.FC<HeaderProps> = ({ onHome, onAdminToggle, isAdmin }) => {
         </div>
 
         <nav className="hidden xl:flex items-center gap-10 font-black tracking-[0.2em] text-xs italic">
-          <a href="#" className="hover:text-orange-500 transition-colors border-b-2 border-transparent hover:border-orange-500 pb-1">BOOKS & COMICS</a>
-          <a href="#" className="hover:text-orange-500 transition-colors border-b-2 border-transparent hover:border-orange-500 pb-1">GAMES</a>
-          <a href="#" className="hover:text-orange-500 transition-colors border-b-2 border-transparent hover:border-orange-500 pb-1 text-zinc-100">MOVIES</a>
+          <a
+            href="#"
+            className="hover:text-orange-500 transition-colors border-b-2 border-transparent hover:border-orange-500 pb-1"
+          >
+            BOOKS & COMICS
+          </a>
+          <a
+            href="#"
+            className="hover:text-orange-500 transition-colors border-b-2 border-transparent hover:border-orange-500 pb-1"
+          >
+            GAMES
+          </a>
+          <a
+            href="#"
+            className="hover:text-orange-500 transition-colors border-b-2 border-transparent hover:border-orange-500 pb-1 text-zinc-100"
+          >
+            MOVIES
+          </a>
         </nav>
 
         <div className="flex items-center gap-6">
-          <button 
+          <button
             onClick={onAdminToggle}
             className={`px-5 py-3 rounded-none border-2 text-[10px] font-black transition-all tracking-[0.2em] uppercase transform -skew-x-12 ${
-              isAdmin 
-              ? 'bg-orange-600 border-orange-500 text-white shadow-[4px_4px_0px_0px_rgba(255,255,255,1)]' 
-              : 'border-zinc-800 hover:border-orange-500 text-zinc-500'
+              isAdmin
+                ? 'bg-orange-600 border-orange-500 text-white shadow-[4px_4px_0px_0px_rgba(255,255,255,1)]'
+                : 'border-zinc-800 hover:border-orange-500 text-zinc-500'
             }`}
           >
             {isAdmin ? 'SYSTEM ACTIVE' : 'ADMIN ACCESS'}
           </button>
-          <button className="btn-retro px-8 py-4 rounded-none font-black text-black uppercase tracking-[0.2em] text-xs shadow-[4px_4px_0px_0px_rgba(255,255,255,0.3)] active:translate-y-1 active:shadow-none transform -skew-x-12 italic">
+
+          <button
+            type="button"
+            onClick={handleSubscribe}
+            className="btn-retro px-8 py-4 rounded-none font-black text-black uppercase tracking-[0.2em] text-xs shadow-[4px_4px_0px_0px_rgba(255,255,255,0.3)] active:translate-y-1 active:shadow-none transform -skew-x-12 italic"
+          >
             SUBSCRIBE
           </button>
         </div>
