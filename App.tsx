@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 import Header from './components/Header';
 import PostCard from './components/PostCard';
@@ -29,40 +29,11 @@ const slugify = (input: string) => {
     .slice(0, 90);
 };
 
-const normalizeImagePath = (src?: string) => {
-  if (!src) return '';
-  if (src.startsWith('http')) return src;
-  if (src.startsWith('/')) return src;
-  return `/images/${src}`;
-};
-
-const pickHeroImage = (p: any): string => {
-  return (
-    normalizeImagePath(p?.imageUrl) ||
-    normalizeImagePath(p?.image) ||
-    normalizeImagePath(p?.heroImage) ||
-    normalizeImagePath(p?.coverImage) ||
-    normalizeImagePath(p?.hero) ||
-    ''
-  );
-};
-
-const pickExcerpt = (p: any): string => {
-  return String(
-    p?.excerpt ??
-      p?.blurb ??
-      p?.summary ??
-      p?.dek ??
-      p?.description ??
-      ''
-  ).trim();
-};
-
 const ensureSlugs = (list: Post[]) => {
   const used = new Set<string>();
   return list.map((p) => {
-    let base = (p as any).slug ? String((p as any).slug) : slugify(p.title);
-    if (!base) base = `post-${p.id}`;
+    let base = (p as any).slug ? String((p as any).slug) : slugify((p as any).title);
+    if (!base) base = `post-${(p as any).id}`;
 
     let s = base;
     let n = 2;
@@ -71,14 +42,53 @@ const ensureSlugs = (list: Post[]) => {
     }
     used.add(s);
 
-    return { ...p, slug: s };
+    return { ...p, slug: s } as Post;
   });
 };
+
+const normalizeImagePath = (src?: string) => {
+  if (!src) return undefined;
+  if (src.startsWith('http')) return src;
+  if (src.startsWith('/')) return src;
+  return `/images/${src}`;
+};
+
+async function fetchPublishedPosts(): Promise<Post[] | null> {
+  try {
+    // posts.json lives in /public so it is served from site root
+    const res = await fetch('/posts.json', { cache: 'no-store' });
+    if (!res.ok) return null;
+
+    const data = (await res.json()) as unknown;
+    if (!Array.isArray(data)) return null;
+
+    // best-effort coerce; your Post typing will guide correctness
+    return data as Post[];
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Merge posts by id (published first, then local overrides).
+ * - Published posts are the canonical public set.
+ * - Local posts override same-id published ones (useful for drafts/edits).
+ * - Unique slugs are ensured after merge.
+ */
+function mergePublishedAndLocal(published: Post[], local: Post[]): Post[] {
+  const byId = new Map<string, Post>();
+
+  for (const p of published) byId.set(String((p as any).id), p);
+  for (const p of local) byId.set(String((p as any).id), p);
+
+  return Array.from(byId.values());
+}
 
 const App: React.FC<AppProps> = ({ routeSlug }) => {
   const navigate = useNavigate();
   const location = useLocation();
 
+  // --- Load local drafts first (fast, offline-friendly) ---
   const [posts, setPosts] = useState<Post[]>(() => {
     if (typeof window === 'undefined') return ensureSlugs(INITIAL_POSTS);
 
@@ -86,15 +96,9 @@ const App: React.FC<AppProps> = ({ routeSlug }) => {
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
         const parsed = JSON.parse(saved) as Post[];
-
-        // Merge: constants first (never disappear), then saved posts
-        const savedIds = new Set(parsed.map((p: Post) => p.id));
-        const missingPosts = INITIAL_POSTS.filter((p) => !savedIds.has(p.id));
-        const merged = missingPosts.length > 0 ? [...missingPosts, ...parsed] : parsed;
-
-        return ensureSlugs(merged.length > 0 ? merged : INITIAL_POSTS);
+        const base = Array.isArray(parsed) && parsed.length > 0 ? parsed : INITIAL_POSTS;
+        return ensureSlugs(base);
       }
-
       return ensureSlugs(INITIAL_POSTS);
     } catch (e) {
       console.error('Failed to load posts', e);
@@ -107,7 +111,9 @@ const App: React.FC<AppProps> = ({ routeSlug }) => {
   const [isAdmin, setIsAdmin] = useState(false);
   const [editingPost, setEditingPost] = useState<Post | null | undefined>(undefined);
 
-  // Persist posts
+  const isEditorActive = editingPost !== undefined;
+
+  // --- Persist posts to localStorage ---
   useEffect(() => {
     if (typeof window !== 'undefined') {
       try {
@@ -118,27 +124,49 @@ const App: React.FC<AppProps> = ({ routeSlug }) => {
     }
   }, [posts]);
 
-  // If the URL is /articles/:slug, select that post.
-  // If URL is /, clear selection.
+  // --- On first mount, try to load published posts.json ---
+  // If found and non-empty, merge it with local drafts and prefer published as baseline.
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      const published = await fetchPublishedPosts();
+      if (cancelled) return;
+
+      if (published && published.length > 0) {
+        setPosts((prevLocal) => {
+          const merged = mergePublishedAndLocal(published, prevLocal);
+          return ensureSlugs(merged);
+        });
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // --- If the URL is /articles/:slug, select that post. If URL is /, clear selection. ---
   useEffect(() => {
     if (routeSlug) {
-      const found = posts.find((p) => (p.slug || slugify(p.title)) === routeSlug);
+      const found = posts.find((p) => (p.slug || slugify((p as any).title)) === routeSlug);
+
       if (found) {
         setSelectedPost(found);
       } else {
+        // unknown slug: show not found as a pseudo selection (keeps UX coherent)
         setSelectedPost({
           id: '__not_found__',
           title: 'Article Not Found',
           excerpt: 'That link does not match any published article on this build.',
           content:
-            'This can happen if the article exists only in local storage on another device, or the slug was changed.\n\nReturn to the feed and open the article again, then copy the link from the article page.',
+            'This can happen if the article exists only in local storage on another device, or the slug was changed.\n\nIf you intended this to be live, publish it into public/posts.json and redeploy.',
           date: new Date().toISOString().split('T')[0],
           category: 'Tech' as any,
           slug: routeSlug,
         } as Post);
       }
     } else {
-      // If user is on "/" (or any non-article route), show feed
       if (location.pathname === '/' || location.pathname === '') {
         setSelectedPost(null);
       }
@@ -172,7 +200,7 @@ const App: React.FC<AppProps> = ({ routeSlug }) => {
   }, [filteredPosts, featuredPost]);
 
   const goToPost = (post: Post) => {
-    const slug = post.slug || slugify(post.title) || `post-${post.id}`;
+    const slug = post.slug || slugify((post as any).title) || `post-${(post as any).id}`;
     setSelectedPost(post);
     navigate(`/articles/${slug}`);
     if (typeof window !== 'undefined') {
@@ -180,42 +208,33 @@ const App: React.FC<AppProps> = ({ routeSlug }) => {
     }
   };
 
-  // FINAL: Navigate using the FINAL post after ensureSlugs() (and featured reordering)
   const handleSavePost = (updatedPost: Post) => {
-    const normalized: Post = {
+    const nextPost: Post = {
       ...updatedPost,
       slug:
         updatedPost.slug && updatedPost.slug.trim().length > 0
           ? slugify(updatedPost.slug)
-          : slugify(updatedPost.title),
+          : slugify((updatedPost as any).title),
     };
-
-    let finalSavedPost: Post | null = null;
 
     setPosts((prev) => {
       // Upsert
-      const exists = prev.find((p) => p.id === normalized.id);
-      let next = exists
-        ? prev.map((p) => (p.id === normalized.id ? normalized : p))
-        : [normalized, ...prev];
+      const exists = prev.find((p) => p.id === nextPost.id);
+      let next = exists ? prev.map((p) => (p.id === nextPost.id ? nextPost : p)) : [nextPost, ...prev];
 
       // Ensure slugs are present and unique
       next = ensureSlugs(next);
 
-      // Capture the actual saved post AFTER ensureSlugs()
-      finalSavedPost = next.find((p) => p.id === normalized.id) || null;
-
       // If marked Featured: make it the only featured post + move to top
-      if (isFeaturedFlag(normalized)) {
+      if (isFeaturedFlag(nextPost)) {
         next = next.map((p) =>
-          p.id === normalized.id
+          p.id === nextPost.id
             ? { ...p, IsFeatured: true, isFeatured: true }
             : { ...p, IsFeatured: false, isFeatured: false }
         );
 
-        const hero = next.find((p) => p.id === normalized.id)!;
-        next = [hero, ...next.filter((p) => p.id !== normalized.id)];
-        finalSavedPost = hero;
+        const hero = next.find((p) => p.id === nextPost.id)!;
+        next = [hero, ...next.filter((p) => p.id !== nextPost.id)];
       }
 
       return next;
@@ -223,11 +242,8 @@ const App: React.FC<AppProps> = ({ routeSlug }) => {
 
     setEditingPost(undefined);
 
-    if (finalSavedPost) {
-      goToPost(finalSavedPost);
-    } else {
-      goToPost(normalized);
-    }
+    // Route to the post immediately (shareable URL)
+    goToPost(nextPost);
   };
 
   const handleAdminLogin = () => {
@@ -254,10 +270,11 @@ const App: React.FC<AppProps> = ({ routeSlug }) => {
     navigate('/');
   };
 
-  const isEditorActive = editingPost !== undefined;
-
-  const heroImage = pickHeroImage(featuredPost as any) || '/images/Alpha-core.jpg';
-  const heroExcerpt = pickExcerpt(featuredPost as any);
+  const heroImage =
+    normalizeImagePath((featuredPost as any)?.imageUrl) ||
+    normalizeImagePath((featuredPost as any)?.image) ||
+    normalizeImagePath((featuredPost as any)?.heroImage) ||
+    '/images/Alpha-core.jpg';
 
   if (!featuredPost) {
     return (
@@ -294,11 +311,8 @@ const App: React.FC<AppProps> = ({ routeSlug }) => {
               <div className="absolute inset-0 bg-zinc-900 pointer-events-none">
                 <img
                   src={heroImage}
-                  alt={featuredPost.title}
+                  alt={(featuredPost as any).title}
                   className="w-full h-full object-cover opacity-70 group-hover:opacity-80 group-hover:scale-105 transition-all duration-[1.5s] ease-out"
-                  onError={(e) => {
-                    (e.currentTarget as HTMLImageElement).style.display = 'none';
-                  }}
                 />
               </div>
 
@@ -312,17 +326,17 @@ const App: React.FC<AppProps> = ({ routeSlug }) => {
                     </span>
                     <div className="h-px w-6 md:w-8 bg-white/40"></div>
                     <span className="text-zinc-300 text-[9px] md:text-[10px] font-mono uppercase tracking-widest">
-                      {featuredPost.date}
+                      {(featuredPost as any).date}
                     </span>
                   </div>
 
                   <h2 className="text-3xl md:text-6xl lg:text-7xl font-black mb-4 md:mb-6 leading-[0.95] tracking-tight uppercase italic text-white retro-glow title-stroke group-hover:text-yellow-400 transition-colors duration-500 drop-shadow-2xl">
-                    {featuredPost.title}
+                    {(featuredPost as any).title}
                   </h2>
 
                   <div className="flex flex-col md:flex-row gap-6 md:gap-8 items-start md:items-center">
                     <p className="text-sm md:text-xl text-zinc-200 max-w-2xl leading-relaxed font-medium pl-4 border-l-2 border-orange-600 line-clamp-3 md:line-clamp-none">
-                      {heroExcerpt}
+                      {(featuredPost as any).excerpt}
                     </p>
                     <button
                       type="button"
@@ -342,7 +356,7 @@ const App: React.FC<AppProps> = ({ routeSlug }) => {
             {/* Filter Bar */}
             <div className="sticky top-[65px] md:top-[73px] z-40 bg-[#050505]/95 backdrop-blur-md border-b border-zinc-800">
               <div className="max-w-7xl mx-auto px-4 md:px-6 py-4 flex overflow-x-auto no-scrollbar gap-6 md:gap-8">
-                {(['All', 'Books & Comics', 'Games', 'Movies'] as Category[]).map((cat) => (
+                {(['All', 'Books & Comics', 'Games', 'Movies', 'Tech'] as Category[]).map((cat) => (
                   <button
                     key={cat}
                     onClick={() => setActiveCategory(cat)}
@@ -361,7 +375,7 @@ const App: React.FC<AppProps> = ({ routeSlug }) => {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-12">
                 {gridPosts.map((post) => (
                   <PostCard
-                    key={post.id}
+                    key={(post as any).id}
                     post={post}
                     onClick={() => goToPost(post)}
                     onEdit={isAdmin ? () => setEditingPost(post) : undefined}
@@ -382,9 +396,7 @@ const App: React.FC<AppProps> = ({ routeSlug }) => {
             <span className="text-2xl font-['Orbitron'] font-black text-white tracking-tighter">
               NERD<span className="text-orange-600">X</span>NEWS
             </span>
-            <span className="text-[10px] text-zinc-600 uppercase tracking-widest">
-              Est. 2024 /// The Resistance
-            </span>
+            <span className="text-[10px] text-zinc-600 uppercase tracking-widest">Est. 2024 /// The Resistance</span>
           </div>
 
           <div className="flex flex-wrap justify-center gap-6 md:gap-8 text-[10px] font-bold text-zinc-500 uppercase tracking-widest">
@@ -399,9 +411,7 @@ const App: React.FC<AppProps> = ({ routeSlug }) => {
             </a>
           </div>
 
-          <div className="text-[10px] text-zinc-700 font-mono text-center md:text-right">
-            © 2024 NERDXNEWS. SYSTEM SECURE.
-          </div>
+          <div className="text-[10px] text-zinc-700 font-mono text-center md:text-right">© 2024 NERDXNEWS. SYSTEM SECURE.</div>
         </div>
       </footer>
 
