@@ -1,4 +1,4 @@
-export const onRequest: PagesFunction = async (context) => {
+export const onRequest = async (context: any) => {
   const { request, env } = context;
   const db = env.DB as D1Database;
 
