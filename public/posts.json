@@ -1,13 +1,1 @@
-[
-  {
-    "id": "test-post",
-    "title": "Test Post",
-    "slug": "test-post",
-    "excerpt": "This is a test.",
-    "content": "This is test content.",
-    "imageUrl": "/images/Alpha-core.jpg",
-    "date": "2025-12-21",
-    "category": "Comics",
-    "isFeatured": true
-  }
-]
+[]

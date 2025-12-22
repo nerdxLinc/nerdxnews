@@ -11,16 +11,7 @@ export const SOCIAL_LINKS = {
 };
 
 export const INITIAL_POSTS: Post[] = [
-  {
-    id: '1',
-    title: 'Welcome to NerdXNews',
-    excerpt: 'Your deployment is working.',
-    content: 'This is a placeholder post generated to ensure the site builds.',
-    date: new Date().toISOString().split('T')[0],
-    category: 'Tech' as any,
-    slug: 'welcome-to-nerdxnews',
-    imageUrl: '/images/Alpha-core.jpg',
-    isFeatured: true,
-    IsFeatured: true,
-  },
+  // Intentionally empty.
+  // Posts should come from your real source (public/posts.json, API, etc.)
+  // rather than a baked-in "Welcome/Test" placeholder.
 ];

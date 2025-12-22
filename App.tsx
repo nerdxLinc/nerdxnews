@@ -1,3 +1,4 @@
+// App.tsx
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 
@@ -14,10 +15,17 @@ type AppProps = {
   routeSlug?: string;
 };
 
-const STORAGE_KEY = 'nerdxnews_production_build_v1';
+// LIVE endpoint (Cloudflare Pages Functions)
+const POSTS_ENDPOINT = '/posts';
 
-// Accept both legacy and current featured flag spellings
-const isFeaturedFlag = (p: any) => Boolean(p?.IsFeatured ?? p?.isFeatured);
+// Accept both legacy and current featured flag spellings (and numeric flags)
+const isFeaturedFlag = (p: any) =>
+  Boolean(
+    p?.IsFeatured ??
+      p?.isFeatured ??
+      (typeof p?.isFeatured === 'number' ? p.isFeatured === 1 : false) ??
+      (typeof p?.IsFeatured === 'number' ? p.IsFeatured === 1 : false)
+  );
 
 const slugify = (input: string) => {
   return (input || '')
@@ -48,14 +56,7 @@ const pickHeroImage = (p: any): string => {
 };
 
 const pickExcerpt = (p: any): string => {
-  return String(
-    p?.excerpt ??
-      p?.blurb ??
-      p?.summary ??
-      p?.dek ??
-      p?.description ??
-      ''
-  ).trim();
+  return String(p?.excerpt ?? p?.blurb ?? p?.summary ?? p?.dek ?? p?.description ?? '').trim();
 };
 
 const ensureSlugs = (list: Post[]) => {
@@ -75,51 +76,64 @@ const ensureSlugs = (list: Post[]) => {
   });
 };
 
+async function fetchPostsFromServer(admin: boolean): Promise<Post[]> {
+  const url = admin ? `${POSTS_ENDPOINT}?admin=true` : `${POSTS_ENDPOINT}`;
+  const res = await fetch(url, { headers: { Accept: 'application/json' } });
+
+  if (!res.ok) {
+    const t = await res.text().catch(() => '');
+    throw new Error(`Failed to load posts: ${res.status} ${t}`);
+  }
+
+  const data = await res.json();
+
+  // Support either {posts:[...]} or legacy array response
+  const list = Array.isArray(data) ? data : data?.posts;
+  return (Array.isArray(list) ? list : []) as Post[];
+}
+
+async function postToServer(post: any): Promise<void> {
+  const res = await fetch(POSTS_ENDPOINT, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify(post),
+  });
+
+  if (!res.ok) {
+    const t = await res.text().catch(() => '');
+    throw new Error(`Publish failed: ${res.status} ${t}`);
+  }
+}
+
 const App: React.FC<AppProps> = ({ routeSlug }) => {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const [posts, setPosts] = useState<Post[]>(() => {
-    if (typeof window === 'undefined') return ensureSlugs(INITIAL_POSTS);
-
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved) as Post[];
-
-        // Merge: constants first (never disappear), then saved posts
-        const savedIds = new Set(parsed.map((p: Post) => p.id));
-        const missingPosts = INITIAL_POSTS.filter((p) => !savedIds.has(p.id));
-        const merged = missingPosts.length > 0 ? [...missingPosts, ...parsed] : parsed;
-
-        return ensureSlugs(merged.length > 0 ? merged : INITIAL_POSTS);
-      }
-
-      return ensureSlugs(INITIAL_POSTS);
-    } catch (e) {
-      console.error('Failed to load posts', e);
-      return ensureSlugs(INITIAL_POSTS);
-    }
-  });
-
+  // Start empty; we load from D1 via /posts immediately
+  const [posts, setPosts] = useState<Post[]>([]);
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
   const [activeCategory, setActiveCategory] = useState<Category>('All');
   const [isAdmin, setIsAdmin] = useState(false);
   const [editingPost, setEditingPost] = useState<Post | null | undefined>(undefined);
 
-  // Persist posts
+  // Initial load (published)
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(posts));
-      } catch (e) {
-        console.error('Failed to save posts', e);
-      }
-    }
-  }, [posts]);
+    if (typeof window === 'undefined') return;
 
-  // If the URL is /articles/:slug, select that post.
-  // If URL is /, clear selection.
+    (async () => {
+      try {
+        const list = await fetchPostsFromServer(false);
+        const next = ensureSlugs(list.length > 0 ? list : (INITIAL_POSTS as any));
+        setPosts(next);
+      } catch (e) {
+        console.error(e);
+        // Fallback only if server fails
+        setPosts(ensureSlugs(INITIAL_POSTS as any));
+      }
+    })();
+  }, []);
+
+  // Route selection: /articles/:slug
   useEffect(() => {
     if (routeSlug) {
       const found = posts.find((p) => (p.slug || slugify(p.title)) === routeSlug);
@@ -138,7 +152,6 @@ const App: React.FC<AppProps> = ({ routeSlug }) => {
         } as Post);
       }
     } else {
-      // If user is on "/" (or any non-article route), show feed
       if (location.pathname === '/' || location.pathname === '') {
         setSelectedPost(null);
       }
@@ -154,7 +167,6 @@ const App: React.FC<AppProps> = ({ routeSlug }) => {
     return list;
   }, [posts, activeCategory, selectedPost]);
 
-  // Choose the featured post from the current view; fall back safely
   const featuredPost = useMemo(() => {
     const featured = filteredPosts.find((p) => isFeaturedFlag(p));
     if (featured) return featured;
@@ -162,10 +174,9 @@ const App: React.FC<AppProps> = ({ routeSlug }) => {
     if (filteredPosts.length > 0) return filteredPosts[0];
     if (posts.length > 0) return posts[0];
 
-    return ensureSlugs(INITIAL_POSTS)[0];
+    return null;
   }, [filteredPosts, posts]);
 
-  // Prevent duplication: remove hero post from the grid list
   const gridPosts = useMemo(() => {
     if (!featuredPost) return filteredPosts;
     return filteredPosts.filter((p) => p.id !== featuredPost.id);
@@ -180,60 +191,61 @@ const App: React.FC<AppProps> = ({ routeSlug }) => {
     }
   };
 
-  // FINAL: Navigate using the FINAL post after ensureSlugs() (and featured reordering)
-  const handleSavePost = (updatedPost: Post) => {
-    const normalized: Post = {
+  // STRAIGHT LINE PUBLISH:
+  // Editor Save -> POST /posts -> reload from server -> navigate
+  const handleSavePost = async (updatedPost: Post) => {
+    const normalizedSlug =
+      updatedPost.slug && updatedPost.slug.trim().length > 0 ? slugify(updatedPost.slug) : slugify(updatedPost.title);
+
+    const payload: any = {
       ...updatedPost,
-      slug:
-        updatedPost.slug && updatedPost.slug.trim().length > 0
-          ? slugify(updatedPost.slug)
-          : slugify(updatedPost.title),
+      id: (updatedPost as any).id || crypto.randomUUID(),
+      slug: normalizedSlug,
+      // normalize common fields expected by your D1 schema
+      excerpt: (updatedPost as any).excerpt ?? (updatedPost as any).blurb ?? '',
+      imageUrl: (updatedPost as any).imageUrl ?? (updatedPost as any).image ?? '',
+      date: (updatedPost as any).date ?? new Date().toISOString().split('T')[0],
+      category: (updatedPost as any).category ?? 'Tech',
+      byline: (updatedPost as any).byline ?? '',
+      status: (updatedPost as any).status ?? 'published',
+      // send numeric flag to match D1
+      isFeatured: isFeaturedFlag(updatedPost) ? 1 : 0,
+      // also keep legacy for your UI logic if any component reads it
+      IsFeatured: isFeaturedFlag(updatedPost) ? 1 : 0,
     };
 
-    let finalSavedPost: Post | null = null;
+    try {
+      await postToServer(payload);
 
-    setPosts((prev) => {
-      // Upsert
-      const exists = prev.find((p) => p.id === normalized.id);
-      let next = exists
-        ? prev.map((p) => (p.id === normalized.id ? normalized : p))
-        : [normalized, ...prev];
+      // Reload (admin view so you see everything if you ever use drafts)
+      const list = await fetchPostsFromServer(true);
+      const next = ensureSlugs(list);
+      setPosts(next);
 
-      // Ensure slugs are present and unique
-      next = ensureSlugs(next);
+      setEditingPost(undefined);
 
-      // Capture the actual saved post AFTER ensureSlugs()
-      finalSavedPost = next.find((p) => p.id === normalized.id) || null;
-
-      // If marked Featured: make it the only featured post + move to top
-      if (isFeaturedFlag(normalized)) {
-        next = next.map((p) =>
-          p.id === normalized.id
-            ? { ...p, IsFeatured: true, isFeatured: true }
-            : { ...p, IsFeatured: false, isFeatured: false }
-        );
-
-        const hero = next.find((p) => p.id === normalized.id)!;
-        next = [hero, ...next.filter((p) => p.id !== normalized.id)];
-        finalSavedPost = hero;
-      }
-
-      return next;
-    });
-
-    setEditingPost(undefined);
-
-    if (finalSavedPost) {
-      goToPost(finalSavedPost);
-    } else {
-      goToPost(normalized);
+      const saved = next.find((p) => (p.slug || slugify(p.title)) === normalizedSlug);
+      if (saved) goToPost(saved);
+      else goToPost(payload as Post);
+    } catch (e) {
+      console.error(e);
+      alert('PUBLISH FAILED. Check /posts endpoint + D1 binding.');
     }
   };
 
-  const handleAdminLogin = () => {
+  const handleAdminLogin = async () => {
     if (isAdmin) {
       const confirmLogout = window.confirm('Terminate Admin Session?');
-      if (confirmLogout) setIsAdmin(false);
+      if (confirmLogout) {
+        setIsAdmin(false);
+        // Refresh published view
+        try {
+          const list = await fetchPostsFromServer(false);
+          setPosts(ensureSlugs(list.length > 0 ? list : (INITIAL_POSTS as any)));
+        } catch (e) {
+          console.error(e);
+        }
+      }
       return;
     }
 
@@ -241,6 +253,14 @@ const App: React.FC<AppProps> = ({ routeSlug }) => {
     if (password && password.toLowerCase() === 'nerdx') {
       setIsAdmin(true);
       alert('ACCESS GRANTED.\n\nEditor Mode Initialized.');
+
+      // Refresh admin view
+      try {
+        const list = await fetchPostsFromServer(true);
+        setPosts(ensureSlugs(list.length > 0 ? list : (INITIAL_POSTS as any)));
+      } catch (e) {
+        console.error(e);
+      }
     } else {
       if (password !== null) {
         alert('ACCESS DENIED.');
@@ -259,14 +279,6 @@ const App: React.FC<AppProps> = ({ routeSlug }) => {
   const heroImage = pickHeroImage(featuredPost as any) || '/images/Alpha-core.jpg';
   const heroExcerpt = pickExcerpt(featuredPost as any);
 
-  if (!featuredPost) {
-    return (
-      <div className="min-h-screen bg-black text-white flex items-center justify-center font-mono animate-pulse">
-        INITIALIZING DATA STREAM...
-      </div>
-    );
-  }
-
   return (
     <div
       className={`min-h-screen flex flex-col selection:bg-orange-500 selection:text-white bg-[#050505] ${
@@ -284,7 +296,7 @@ const App: React.FC<AppProps> = ({ routeSlug }) => {
       <main className="flex-1 relative">
         {selectedPost ? (
           <PostDetail post={selectedPost} onBack={onHome} isAdmin={isAdmin} />
-        ) : (
+        ) : featuredPost ? (
           <>
             {/* Featured Hero Section */}
             <section
@@ -373,6 +385,27 @@ const App: React.FC<AppProps> = ({ routeSlug }) => {
 
             <Newsletter />
           </>
+        ) : (
+          <div className="min-h-[70vh] flex items-center justify-center px-6">
+            <div className="max-w-xl w-full text-center">
+              <div className="text-[10px] font-black uppercase tracking-[0.3em] text-zinc-500 mb-4">No published intel</div>
+              <h2 className="text-3xl md:text-5xl font-black uppercase italic tracking-tight text-white mb-4">
+                Ready when you are.
+              </h2>
+              <p className="text-sm md:text-base text-zinc-300 leading-relaxed mb-8">
+                There are currently no published articles on this build. Enter Admin mode to create the first post.
+              </p>
+
+              {isAdmin && (
+                <button
+                  onClick={() => setEditingPost(null)}
+                  className="w-full md:w-auto bg-white text-black px-6 py-3 md:px-8 md:py-4 font-black uppercase tracking-[0.2em] hover:bg-orange-600 hover:text-white transition-all shadow-[6px_6px_0_0_#000] hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px] text-xs md:text-sm"
+                >
+                  Create First Article &rarr;
+                </button>
+              )}
+            </div>
+          </div>
         )}
       </main>
 
@@ -382,9 +415,7 @@ const App: React.FC<AppProps> = ({ routeSlug }) => {
             <span className="text-2xl font-['Orbitron'] font-black text-white tracking-tighter">
               NERD<span className="text-orange-600">X</span>NEWS
             </span>
-            <span className="text-[10px] text-zinc-600 uppercase tracking-widest">
-              Est. 2024 /// The Resistance
-            </span>
+            <span className="text-[10px] text-zinc-600 uppercase tracking-widest">Est. 2024 /// The Resistance</span>
           </div>
 
           <div className="flex flex-wrap justify-center gap-6 md:gap-8 text-[10px] font-bold text-zinc-500 uppercase tracking-widest">
@@ -399,15 +430,11 @@ const App: React.FC<AppProps> = ({ routeSlug }) => {
             </a>
           </div>
 
-          <div className="text-[10px] text-zinc-700 font-mono text-center md:text-right">
-            © 2024 NERDXNEWS. SYSTEM SECURE.
-          </div>
+          <div className="text-[10px] text-zinc-700 font-mono text-center md:text-right">© 2024 NERDXNEWS. SYSTEM SECURE.</div>
         </div>
       </footer>
 
-      {isEditorActive && (
-        <Editor post={editingPost} onSave={handleSavePost} onClose={() => setEditingPost(undefined)} />
-      )}
+      {isEditorActive && <Editor post={editingPost} onSave={handleSavePost} onClose={() => setEditingPost(undefined)} />}
 
       {isAdmin && !isEditorActive && !selectedPost && (
         <button
