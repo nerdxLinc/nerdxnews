@@ -1,0 +1,40 @@
+warning: in the working copy of 'constants.tsx', LF will be replaced by CRLF the next time Git touches it
+[1mdiff --git a/constants.tsx b/constants.tsx[m
+[1mindex e1f202d..b9718eb 100644[m
+[1m--- a/constants.tsx[m
+[1m+++ b/constants.tsx[m
+[36m@@ -2,6 +2,14 @@[m [mimport { Post } from './types';[m
+ [m
+ export const LOGO_URL = '/logo.jpg';[m
+ [m
+[32m+[m[32mexport const SOCIAL_LINKS = {[m
+[32m+[m[32m  twitter: 'https://x.com',[m
+[32m+[m[32m  facebook: 'https://facebook.com',[m
+[32m+[m[32m  instagram: 'https://instagram.com',[m
+[32m+[m[32m  github: 'https://github.com',[m
+[32m+[m[32m  newsletter: 'https://lincolnbransch.substack.com',[m
+[32m+[m[32m};[m
+[32m+[m
+ export const INITIAL_POSTS: Post[] = [[m
+   {[m
+     id: '1',[m
+[36m@@ -9,17 +17,10 @@[m [mexport const INITIAL_POSTS: Post[] = [[m
+     excerpt: 'Your deployment is working.',[m
+     content: 'This is a placeholder post generated to ensure the site builds.',[m
+     date: new Date().toISOString().split('T')[0],[m
+[31m-    category: 'Tech',[m
+[32m+[m[32m    category: 'Tech' as any,[m
+[32m+[m[32m    slug: 'welcome-to-nerdxnews',[m
+     imageUrl: '/images/Alpha-core.jpg',[m
+     isFeatured: true,[m
+     IsFeatured: true,[m
+   },[m
+ ];[m
+[31m-[m
+[31m-export const SOCIAL_LINKS = {[m
+[31m-  twitter: 'https://x.com',[m
+[31m-  facebook: 'https://facebook.com',[m
+[31m-  instagram: 'https://instagram.com',[m
+[31m-  github: 'https://github.com',[m
+[31m-  newsletter: 'https://lincolnbransch.substack.com',[m
+[31m-};[m

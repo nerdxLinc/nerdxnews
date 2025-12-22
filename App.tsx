@@ -270,6 +270,37 @@ const App: React.FC<AppProps> = ({ routeSlug }) => {
     navigate('/');
   };
 
+  /**
+   * EXPORT WORKFLOW (Admin):
+   * - Downloads a production-ready posts.json snapshot of your current post set.
+   * - You then drop it into /public/posts.json, commit, and Cloudflare deploys.
+   */
+  const exportPostsJson = () => {
+    try {
+      // Never export pseudo posts
+      const exportable = posts.filter((p) => (p as any).id !== '__not_found__');
+
+      // Ensure slugs are present + stable in export
+      const normalized = ensureSlugs(exportable);
+
+      const json = JSON.stringify(normalized, null, 2);
+      const blob = new Blob([json], { type: 'application/json;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'posts.json';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error(e);
+      alert('Export failed. Check console for details.');
+    }
+  };
+
   const heroImage =
     normalizeImagePath((featuredPost as any)?.imageUrl) ||
     normalizeImagePath((featuredPost as any)?.image) ||
@@ -290,19 +321,22 @@ const App: React.FC<AppProps> = ({ routeSlug }) => {
         isAdmin ? 'border-t-4 border-orange-600' : ''
       }`}
     >
-      {isAdmin && (
-        <div className="fixed bottom-4 left-4 z-[50] bg-orange-600 text-white text-[10px] font-black px-4 py-2 tracking-widest uppercase shadow-lg border border-white/20 pointer-events-none">
-          EDITOR MODE ACTIVE
-        </div>
-      )}
+     {isAdmin && !isEditorActive && (
+  <div className="fixed bottom-4 right-4 z-[120] flex flex-col gap-2">
+    <button
+      type="button"
+      onClick={exportPostsJson}
+      className="bg-orange-600 text-white px-5 py-3 font-black uppercase tracking-widest text-xs border-2 border-white shadow-lg hover:bg-white hover:text-black transition-all"
+    >
+      Export posts.json
+    </button>
+    <div className="text-[9px] text-zinc-300 font-mono uppercase tracking-widest text-right">
+      Publish to production
+    </div>
+  </div>
+)}
 
-      <Header onHome={onHome} onAdminToggle={handleAdminLogin} isAdmin={isAdmin} />
 
-      <main className="flex-1 relative">
-        {selectedPost ? (
-          <PostDetail post={selectedPost} onBack={onHome} isAdmin={isAdmin} />
-        ) : (
-          <>
             {/* Featured Hero Section */}
             <section
               className="relative w-full h-[60vh] md:h-[75vh] min-h-[400px] md:min-h-[500px] flex items-end cursor-pointer group overflow-hidden border-b border-zinc-800"
