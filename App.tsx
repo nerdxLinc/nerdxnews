@@ -75,10 +75,6 @@ const ensureSlugs = (list: Post[]) => {
 };
 
 function normalizeServerList(data: any): Post[] {
-  // Support server shapes:
-  // 1) [ ...posts ]
-  // 2) { posts: [ ...posts ] }
-  // 3) { results: [ ...posts ] }
   if (Array.isArray(data)) return data as Post[];
   if (Array.isArray(data?.posts)) return data.posts as Post[];
   if (Array.isArray(data?.results)) return data.results as Post[];
@@ -96,6 +92,23 @@ async function fetchPostsFromServer(admin: boolean): Promise<Post[]> {
 
   const data = await res.json();
   return normalizeServerList(data);
+}
+
+async function fetchPostBySlugFromServer(slug: string, admin: boolean): Promise<Post | null> {
+  const url = admin
+    ? `/posts?admin=true&slug=${encodeURIComponent(slug)}`
+    : `/posts?slug=${encodeURIComponent(slug)}`;
+
+  const res = await fetch(url, { method: 'GET' });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(text || `Failed to load post (${res.status})`);
+  }
+
+  const data = await res.json();
+  const row = data?.post ?? null;
+  return row ? (row as Post) : null;
 }
 
 async function postToServer(payload: any): Promise<{ success: boolean; slug?: string }> {
@@ -118,6 +131,24 @@ async function postToServer(payload: any): Promise<{ success: boolean; slug?: st
 const App: React.FC<AppProps> = ({ routeSlug }) => {
   const navigate = useNavigate();
   const location = useLocation();
+
+  // Route slug fallback: derive from pathname if prop isn't present.
+  const effectiveRouteSlug = useMemo(() => {
+    if (routeSlug && String(routeSlug).trim()) return String(routeSlug).trim();
+
+    const path = (location.pathname || '').trim();
+    const prefix = '/articles/';
+    if (path.startsWith(prefix)) {
+      const raw = path.slice(prefix.length);
+      const cleaned = raw.split('?')[0].split('#')[0];
+      try {
+        return decodeURIComponent(cleaned);
+      } catch {
+        return cleaned;
+      }
+    }
+    return '';
+  }, [routeSlug, location.pathname]);
 
   const [posts, setPosts] = useState<Post[]>(() => {
     if (typeof window === 'undefined') return ensureSlugs(INITIAL_POSTS);
@@ -154,7 +185,6 @@ const App: React.FC<AppProps> = ({ routeSlug }) => {
         const next = ensureSlugs(list.length > 0 ? list : INITIAL_POSTS);
         setPosts(next);
       } catch (e) {
-        // If server load fails, keep local posts (and INITIAL_POSTS)
         console.error('Server load failed (keeping local)', e);
       }
     })();
@@ -164,7 +194,7 @@ const App: React.FC<AppProps> = ({ routeSlug }) => {
     };
   }, []);
 
-  // Persist posts locally (so you can still work even if server hiccups)
+  // Persist posts locally (cache only)
   useEffect(() => {
     if (typeof window !== 'undefined') {
       try {
@@ -175,32 +205,73 @@ const App: React.FC<AppProps> = ({ routeSlug }) => {
     }
   }, [posts]);
 
-  // If the URL is /articles/:slug, select that post.
-  // If URL is /, clear selection.
+  // Deep link resolver:
+  // If URL is /articles/:slug:
+  // 1) try local list match
+  // 2) if not found, fetch single post from server by slug
+  // If URL is /, clear selection
   useEffect(() => {
-    if (routeSlug) {
-      const found = posts.find((p) => (p.slug || slugify(p.title)) === routeSlug);
-      if (found) {
-        setSelectedPost(found);
-      } else {
+    let cancelled = false;
+
+    (async () => {
+      const slug = (effectiveRouteSlug || '').trim();
+
+      if (slug) {
+        // First try local list
+        const found = posts.find((p) => (p.slug || slugify(p.title)) === slug);
+        if (found) {
+          setSelectedPost(found);
+          return;
+        }
+
+        // Then fetch by slug from server (published feed)
+        try {
+          const one = await fetchPostBySlugFromServer(slug, false);
+          if (cancelled) return;
+
+          if (one) {
+            // ensure it has a slug field
+            const hydrated = { ...(one as any), slug: (one as any).slug || slug } as Post;
+
+            // merge into posts list so next navigation stays consistent
+            setPosts((prev) => {
+              const exists = prev.some((p) => (p.slug || slugify(p.title)) === slug);
+              if (exists) return prev;
+              return ensureSlugs([hydrated, ...prev]);
+            });
+
+            setSelectedPost(hydrated);
+            return;
+          }
+        } catch (e) {
+          console.error('Fetch by slug failed', e);
+        }
+
+        // Not found: show explicit not-found view (still renders PostDetail)
         setSelectedPost({
           id: '__not_found__',
           title: 'Article Not Found',
           excerpt: 'That link does not match any published article on this build.',
           content:
-            'This can happen if the article exists only in local storage on another device, or the slug was changed.\n\nReturn to the feed and open the article again, then copy the link from the article page.',
+            'This article slug could be wrong, or the article may be unpublished.\n\nReturn to the feed and open the article again, then copy the link from the article page.',
           date: new Date().toISOString().split('T')[0],
           category: 'Tech' as any,
-          slug: routeSlug,
+          slug,
         } as Post);
+        return;
       }
-    } else {
+
+      // No slug: if at home, clear selection
       if (location.pathname === '/' || location.pathname === '') {
         setSelectedPost(null);
       }
-    }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [routeSlug, posts]);
+  }, [effectiveRouteSlug, posts, location.pathname]);
 
   const filteredPosts = useMemo(() => {
     let list = posts.filter((p) => p.id !== (selectedPost?.id || ''));
@@ -251,7 +322,6 @@ const App: React.FC<AppProps> = ({ routeSlug }) => {
       id: (updatedPost as any).id || crypto.randomUUID(),
       slug: normalizedSlug,
 
-      // normalize common fields expected by your D1 schema
       excerpt: (updatedPost as any).excerpt ?? (updatedPost as any).blurb ?? '',
       imageUrl: (updatedPost as any).imageUrl ?? (updatedPost as any).image ?? '',
       date: (updatedPost as any).date ?? new Date().toISOString().split('T')[0],
@@ -269,10 +339,8 @@ const App: React.FC<AppProps> = ({ routeSlug }) => {
     try {
       await postToServer(payload);
 
-      // Reload admin list (so you always see it immediately)
       const list = await fetchPostsFromServer(true);
 
-      // Ensure only one featured post (optional safety)
       const normalized = list.map((p: any) => ({
         ...p,
         isFeatured: p.isFeatured === 1 || p.isFeatured === '1' || p.isFeatured === true ? 1 : 0,
@@ -305,7 +373,6 @@ const App: React.FC<AppProps> = ({ routeSlug }) => {
       setIsAdmin(true);
       alert('ACCESS GRANTED.\n\nEditor Mode Initialized.');
 
-      // When admin logs in, refresh list with admin=true so drafts/hidden show if you ever use them
       try {
         const list = await fetchPostsFromServer(true);
         setPosts(ensureSlugs(list.length > 0 ? list : posts));
@@ -330,8 +397,9 @@ const App: React.FC<AppProps> = ({ routeSlug }) => {
 
   return (
     <div
-      className={`min-h-screen flex flex-col selection:bg-orange-500 selection:text-white bg-[#050505] ${isAdmin ? 'border-t-4 border-orange-600' : ''
-        }`}
+      className={`min-h-screen w-full overflow-x-hidden flex flex-col selection:bg-orange-500 selection:text-white bg-[#050505] ${
+        isAdmin ? 'border-t-4 border-orange-600' : ''
+      }`}
     >
       {isAdmin && (
         <div className="fixed bottom-4 left-4 z-[50] bg-orange-600 text-white text-[10px] font-black px-4 py-2 tracking-widest uppercase shadow-lg border border-white/20 pointer-events-none">
@@ -341,15 +409,9 @@ const App: React.FC<AppProps> = ({ routeSlug }) => {
 
       <Header onHome={onHome} onAdminToggle={handleAdminLogin} isAdmin={isAdmin} />
 
-      <main className="flex-1 relative">
+      <main className="flex-1 relative w-full overflow-x-hidden">
         {selectedPost ? (
-          <PostDetail
-            post={selectedPost}
-            onBack={onHome}
-            isAdmin={isAdmin}
-            onEdit={(p) => setEditingPost(p)}
-          />
-
+          <PostDetail post={selectedPost} onBack={onHome} isAdmin={isAdmin} onEdit={(p) => setEditingPost(p)} />
         ) : featuredPost ? (
           <>
             {/* Featured Hero Section */}
@@ -403,8 +465,8 @@ const App: React.FC<AppProps> = ({ routeSlug }) => {
                     {featuredPost.title}
                   </h2>
 
-                  <div className="flex flex-col md:flex-row gap-6 md:gap-8 items-start md:items-center">
-                    <p className="text-sm md:text-xl text-zinc-200 max-w-2xl leading-relaxed font-medium pl-4 border-l-2 border-orange-600 line-clamp-3 md:line-clamp-none">
+                  <div className="flex flex-col md:flex-row gap-6 md:gap-8 items-start md:items-center min-w-0">
+                    <p className="text-sm md:text-xl text-zinc-200 max-w-2xl leading-relaxed font-medium pl-4 border-l-2 border-orange-600 line-clamp-3 md:line-clamp-none break-words">
                       {heroExcerpt}
                     </p>
                     <button
@@ -423,14 +485,15 @@ const App: React.FC<AppProps> = ({ routeSlug }) => {
             </section>
 
             {/* Filter Bar */}
-            <div className="sticky top-[65px] md:top-[73px] z-40 bg-[#050505]/95 backdrop-blur-md border-b border-zinc-800">
+            <div className="sticky top-[65px] md:top-[73px] z-40 bg-[#050505]/95 backdrop-blur-md border-b border-zinc-800 overflow-x-hidden">
               <div className="max-w-7xl mx-auto px-4 md:px-6 py-4 flex overflow-x-auto no-scrollbar gap-6 md:gap-8">
                 {(['All', 'Books & Comics', 'Games', 'Movies'] as Category[]).map((cat) => (
                   <button
                     key={cat}
                     onClick={() => setActiveCategory(cat)}
-                    className={`whitespace-nowrap text-[9px] md:text-[10px] font-black uppercase tracking-[0.2em] transition-all flex-shrink-0 ${activeCategory === cat ? 'text-orange-600 scale-105' : 'text-zinc-500 hover:text-white'
-                      }`}
+                    className={`whitespace-nowrap text-[9px] md:text-[10px] font-black uppercase tracking-[0.2em] transition-all flex-shrink-0 ${
+                      activeCategory === cat ? 'text-orange-600 scale-105' : 'text-zinc-500 hover:text-white'
+                    }`}
                   >
                     {cat === 'All' ? '/// All Feeds' : cat}
                   </button>
@@ -439,7 +502,7 @@ const App: React.FC<AppProps> = ({ routeSlug }) => {
             </div>
 
             {/* Main Grid */}
-            <div className="max-w-7xl mx-auto px-4 md:px-6 py-8 md:py-12">
+            <div className="max-w-7xl mx-auto w-full px-4 md:px-6 py-8 md:py-12">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-12">
                 {gridPosts.map((post) => (
                   <PostCard
@@ -458,9 +521,7 @@ const App: React.FC<AppProps> = ({ routeSlug }) => {
         ) : (
           <div className="min-h-[70vh] flex items-center justify-center px-6">
             <div className="max-w-xl w-full text-center">
-              <div className="text-[10px] font-black uppercase tracking-[0.3em] text-zinc-500 mb-4">
-                No published intel
-              </div>
+              <div className="text-[10px] font-black uppercase tracking-[0.3em] text-zinc-500 mb-4">No published intel</div>
               <h2 className="text-3xl md:text-5xl font-black uppercase italic tracking-tight text-white mb-4">
                 Ready when you are.
               </h2>
@@ -481,10 +542,10 @@ const App: React.FC<AppProps> = ({ routeSlug }) => {
         )}
       </main>
 
-      <footer className="border-t border-zinc-800 bg-black py-12 px-6">
+      <footer className="border-t border-zinc-800 bg-black py-12 px-6 overflow-x-hidden">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-8">
-          <div className="flex flex-col gap-2 text-center md:text-left">
-            <span className="text-2xl font-['Orbitron'] font-black text-white tracking-tighter">
+          <div className="flex flex-col gap-2 text-center md:text-left min-w-0">
+            <span className="text-2xl font-['Orbitron'] font-black text-white tracking-tighter break-words">
               NERD<span className="text-orange-600">X</span>NEWS
             </span>
             <span className="text-[10px] text-zinc-600 uppercase tracking-widest">Est. 2024 /// The Resistance</span>
