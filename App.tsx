@@ -330,9 +330,8 @@ const App: React.FC<AppProps> = ({ routeSlug }) => {
 
   return (
     <div
-      className={`min-h-screen flex flex-col selection:bg-orange-500 selection:text-white bg-[#050505] ${
-        isAdmin ? 'border-t-4 border-orange-600' : ''
-      }`}
+      className={`min-h-screen flex flex-col selection:bg-orange-500 selection:text-white bg-[#050505] ${isAdmin ? 'border-t-4 border-orange-600' : ''
+        }`}
     >
       {isAdmin && (
         <div className="fixed bottom-4 left-4 z-[50] bg-orange-600 text-white text-[10px] font-black px-4 py-2 tracking-widest uppercase shadow-lg border border-white/20 pointer-events-none">
@@ -344,7 +343,13 @@ const App: React.FC<AppProps> = ({ routeSlug }) => {
 
       <main className="flex-1 relative">
         {selectedPost ? (
-          <PostDetail post={selectedPost} onBack={onHome} isAdmin={isAdmin} />
+          <PostDetail
+            post={selectedPost}
+            onBack={onHome}
+            isAdmin={isAdmin}
+            onEdit={(p) => setEditingPost(p)}
+          />
+
         ) : featuredPost ? (
           <>
             {/* Featured Hero Section */}
@@ -424,9 +429,8 @@ const App: React.FC<AppProps> = ({ routeSlug }) => {
                   <button
                     key={cat}
                     onClick={() => setActiveCategory(cat)}
-                    className={`whitespace-nowrap text-[9px] md:text-[10px] font-black uppercase tracking-[0.2em] transition-all flex-shrink-0 ${
-                      activeCategory === cat ? 'text-orange-600 scale-105' : 'text-zinc-500 hover:text-white'
-                    }`}
+                    className={`whitespace-nowrap text-[9px] md:text-[10px] font-black uppercase tracking-[0.2em] transition-all flex-shrink-0 ${activeCategory === cat ? 'text-orange-600 scale-105' : 'text-zinc-500 hover:text-white'
+                      }`}
                   >
                     {cat === 'All' ? '/// All Feeds' : cat}
                   </button>

@@ -5,7 +5,7 @@ import { Post, Category } from "../types";
 
 type EditorProps = {
   post: Post | null | undefined; // undefined means editor closed; null means "new"
-  onSave: (post: Post) => void;  // saves to local (App.tsx localStorage)
+  onSave: (post: Post) => void;  // App.tsx handles LIVE publish to /posts (D1)
   onClose: () => void;
 };
 
@@ -17,7 +17,7 @@ const CATEGORIES: Exclude<Category, "All">[] = [
 ];
 
 function slugify(input: string): string {
-  return input
+  return (input || "")
     .toLowerCase()
     .trim()
     .replace(/['"]/g, "")
@@ -61,7 +61,7 @@ export default function Editor({ post, onSave, onClose }: EditorProps) {
   const [imageUrl, setImageUrl] = useState<string>(pickImage(post));
   const [featured, setFeatured] = useState<boolean>(pickFeatured(post));
 
-  // Optional helper UI (you had an "AI assistant" box in the modal)
+  // Optional helper UI
   const [topic, setTopic] = useState("");
 
   // Reset editor fields whenever you open a different post (or "new")
@@ -91,10 +91,12 @@ export default function Editor({ post, onSave, onClose }: EditorProps) {
     return s ? `/articles/${s}` : "/articles/your-article-slug";
   }, [slug]);
 
+  // Keep this as a convenience: it copies a JSON entry of the current post.
+  // NOT required for publishing anymore.
   const deploymentJsonEntry = useMemo(() => {
     const id = post?.id ?? String(Date.now());
 
-    const entry: Post = {
+    const entry: any = {
       id,
       title: title.trim(),
       slug: (slug || "").trim(),
@@ -103,35 +105,27 @@ export default function Editor({ post, onSave, onClose }: EditorProps) {
       date: post?.date ?? safeTodayISO(),
       category,
       imageUrl: imageUrl.trim() || undefined,
-      // set BOTH spellings for maximum compatibility with existing code paths
-      isFeatured: featured,
-      IsFeatured: featured,
+      isFeatured: featured ? 1 : 0,
+      IsFeatured: featured ? 1 : 0,
+      status: (post as any)?.status ?? "published",
+      byline: (post as any)?.byline ?? "NerdX",
     };
 
     return JSON.stringify(entry, null, 2);
-  }, [
-    post?.id,
-    post?.date,
-    title,
-    slug,
-    excerpt,
-    content,
-    category,
-    imageUrl,
-    featured,
-  ]);
+  }, [post?.id, post?.date, post, title, slug, excerpt, content, category, imageUrl, featured]);
 
   const handleCopyDeploymentCode = async () => {
     try {
       await navigator.clipboard.writeText(deploymentJsonEntry);
-      alert("Copied.\n\nPaste this object into public/posts.json (inside the array).");
+      alert("Copied JSON.");
     } catch {
-      // Fallback: prompt
       window.prompt("Copy this JSON:", deploymentJsonEntry);
     }
   };
 
-  const handleSaveLocal = () => {
+  // FINAL: This is now a LIVE publish trigger.
+  // App.tsx is responsible for posting to /posts (D1).
+  const handlePublishLive = () => {
     const finalTitle = title.trim();
     const finalSlug = (slug || "").trim();
 
@@ -152,7 +146,7 @@ export default function Editor({ post, onSave, onClose }: EditorProps) {
       return;
     }
 
-    const next: Post = {
+    const next: any = {
       id: post?.id ?? String(Date.now()),
       title: finalTitle,
       slug: finalSlug,
@@ -162,12 +156,16 @@ export default function Editor({ post, onSave, onClose }: EditorProps) {
       category,
       imageUrl: imageUrl.trim() || undefined,
 
-      // Keep both spellings for compatibility
-      isFeatured: featured,
-      IsFeatured: featured,
+      // send BOTH for compatibility; numeric works with D1 schema
+      isFeatured: featured ? 1 : 0,
+      IsFeatured: featured ? 1 : 0,
+
+      // default to published; App.tsx currently posts status too
+      status: (post as any)?.status ?? "published",
+      byline: (post as any)?.byline ?? "NerdX",
     };
 
-    onSave(next);
+    onSave(next as Post);
   };
 
   const handleGenerateDraft = () => {
@@ -189,7 +187,7 @@ export default function Editor({ post, onSave, onClose }: EditorProps) {
               {isEditing ? "Edit Field Intel" : "New Field Intel"}
             </div>
             <div className="text-[10px] text-zinc-500 font-mono mt-1">
-              LOCAL draft + JSON publish workflow (public/posts.json)
+              LIVE publish workflow (D1 via <span className="text-zinc-300">/posts</span>)
             </div>
           </div>
 
@@ -343,12 +341,12 @@ export default function Editor({ post, onSave, onClose }: EditorProps) {
             <button
               onClick={handleCopyDeploymentCode}
               className="border border-yellow-600/60 text-yellow-400 hover:text-yellow-300 hover:border-yellow-500 px-4 py-2 text-xs font-black uppercase tracking-widest"
+              title="Optional: copies the post as JSON"
             >
-              {"</>"} Copy Deployment Code
+              {"</>"} Copy JSON
             </button>
             <div className="text-[10px] text-zinc-500 md:self-center">
-              Paste into <span className="font-mono text-zinc-300">public/posts.json</span>{" "}
-              (inside the array)
+              Optional — for backups. Publishing is now via <span className="font-mono text-zinc-300">/posts</span>.
             </div>
           </div>
 
@@ -360,10 +358,10 @@ export default function Editor({ post, onSave, onClose }: EditorProps) {
               Abort
             </button>
             <button
-              onClick={handleSaveLocal}
+              onClick={handlePublishLive}
               className="bg-orange-600 hover:bg-orange-500 text-black px-5 py-2 text-xs font-black uppercase tracking-[0.2em]"
             >
-              Save (Local)
+              Publish (Live)
             </button>
           </div>
         </div>
