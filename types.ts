@@ -1,9 +1,28 @@
-export type Category =
+// types.ts
+
+/** Legacy categories (older builds / older seeded content) */
+export type LegacyCategory =
   | 'tech'
   | 'books'
   | 'comics'
   | 'games'
   | 'movies';
+
+/** Live site / UI categories (what your current app and D1 are using) */
+export type SiteCategory =
+  | 'Tech'
+  | 'Books & Comics'
+  | 'Games'
+  | 'Movies';
+
+/**
+ * Category stored on a Post.
+ * Supports both legacy + current values so old content doesn't break.
+ */
+export type Category = LegacyCategory | SiteCategory;
+
+/** UI filter category (adds "All") */
+export type CategoryFilter = 'All' | Category;
 
 export interface Post {
   id: string;
@@ -25,10 +44,16 @@ export interface Post {
   heroImage?: string;
 
   /** Featured flags (supports legacy + current spelling) */
-  isFeatured?: boolean;
-  IsFeatured?: boolean;
+  isFeatured?: boolean | 0 | 1;
+  IsFeatured?: boolean | 0 | 1;
 
   /** Optional metadata */
   author?: string;
   tags?: string[];
+
+  /** Optional fields you’re already using in D1 results */
+  status?: string;
+  byline?: string;
+  created_at?: string;
+  updated_at?: string;
 }
