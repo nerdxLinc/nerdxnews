@@ -62,8 +62,9 @@ export const onRequest = async (context: any) => {
     }
   }
 
-  // POST /posts  (admin-only by frontend gate, for now)
-  // Upsert by slug (stable key). Enforces "only one featured post".
+  // POST /posts
+  // Fix: if an existing row is identified by id, UPDATE by id
+  // so changing slug doesn't trip UNIQUE(posts.id).
   if (request.method === "POST") {
     try {
       const body = await request.json();
@@ -82,6 +83,7 @@ export const onRequest = async (context: any) => {
         byline,
       } = body ?? {};
 
+      const cleanId = String(id || "").trim(); // can be empty for "new"
       const cleanSlug = String(slug || "").trim();
       const cleanTitle = String(title || "").trim();
       const cleanContent = String(content || "").trim();
@@ -102,7 +104,68 @@ export const onRequest = async (context: any) => {
           .run();
       }
 
-      // Upsert by slug. Preserve created_at if row exists.
+      // If client sent an id, and that id exists, UPDATE BY ID (allows slug changes)
+      if (cleanId) {
+        const existingById = await db
+          .prepare(`SELECT id, slug FROM posts WHERE id = ? LIMIT 1`)
+          .bind(cleanId)
+          .first();
+
+        if (existingById) {
+          // Prevent slug collision with another row
+          const slugClash = await db
+            .prepare(
+              `SELECT id FROM posts WHERE slug = ? AND id != ? LIMIT 1`
+            )
+            .bind(cleanSlug, cleanId)
+            .first();
+
+          if (slugClash) {
+            return json(
+              { error: "Slug already exists for another post." },
+              409
+            );
+          }
+
+          await db
+            .prepare(
+              `
+              UPDATE posts
+              SET
+                slug = ?,
+                title = ?,
+                excerpt = ?,
+                content = ?,
+                imageUrl = ?,
+                date = ?,
+                category = ?,
+                isFeatured = ?,
+                status = ?,
+                byline = ?,
+                updated_at = datetime('now')
+              WHERE id = ?
+            `
+            )
+            .bind(
+              cleanSlug,
+              cleanTitle,
+              String(excerpt ?? ""),
+              cleanContent,
+              String(imageUrl ?? ""),
+              String(date ?? ""),
+              String(category ?? ""),
+              featuredFlag,
+              String(status ?? "published"),
+              String(byline ?? ""),
+              cleanId
+            )
+            .run();
+
+          return json({ success: true, slug: cleanSlug });
+        }
+      }
+
+      // Otherwise: insert new row (or upsert by slug if same slug exists)
       await db
         .prepare(
           `
@@ -134,7 +197,7 @@ export const onRequest = async (context: any) => {
         `
         )
         .bind(
-          id ?? null,
+          cleanId || null,
           cleanSlug,
           cleanTitle,
           String(excerpt ?? ""),
