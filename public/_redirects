@@ -3,4 +3,4 @@
 /upload-image   /upload-image   200
 
 # SPA fallback for everything else
-/*              /index.html     200
+
