@@ -5,7 +5,7 @@ import { Post, Category } from "../types";
 
 type EditorProps = {
   post: Post | null | undefined; // undefined means editor closed; null means "new"
-  onSave: (post: Post) => void;  // App.tsx handles LIVE publish to /posts (D1)
+  onSave: (post: Post) => void;  // saves to local (App.tsx localStorage)
   onClose: () => void;
 };
 
@@ -13,11 +13,11 @@ const CATEGORIES: Exclude<Category, "All">[] = [
   "Books & Comics",
   "Games",
   "Movies",
-  "Tech",
+  "Tech", // keep legacy-compatible
 ];
 
 function slugify(input: string): string {
-  return (input || "")
+  return input
     .toLowerCase()
     .trim()
     .replace(/['"]/g, "")
@@ -27,135 +27,160 @@ function slugify(input: string): string {
 }
 
 function safeTodayISO(): string {
-  return new Date().toISOString().split("T")[0];
-}
-
-function pickFeatured(p: any): boolean {
-  return Boolean(p?.IsFeatured ?? p?.isFeatured);
+  const d = new Date();
+  return d.toISOString().slice(0, 10);
 }
 
 function pickImage(p: any): string {
   return p?.imageUrl || p?.image || p?.heroImage || "";
 }
 
-export default function Editor({ post, onSave, onClose }: EditorProps) {
-  if (post === undefined) return null;
+function isProbablyUrl(v: string): boolean {
+  const s = (v || "").trim();
+  if (!s) return true;
+  return /^https?:\/\/.+/i.test(s);
+}
 
-  const isEditing = Boolean(post && post.id);
-  const postKey = post === null ? "new" : post.id;
+const Editor: React.FC<EditorProps> = ({ post, onSave, onClose }) => {
+  const isOpen = post !== undefined;
 
   const [title, setTitle] = useState(post?.title ?? "");
-  const [slug, setSlug] = useState(post?.slug ?? "");
-  const [slugTouched, setSlugTouched] = useState(false);
-
-  const [excerpt, setExcerpt] = useState(post?.excerpt ?? "");
-  const [content, setContent] = useState(post?.content ?? "");
-  const [category, setCategory] = useState<Exclude<Category, "All">>(
-    (post?.category as any) ?? "Books & Comics"
-  );
+  const [slug, setSlug] = useState((post as any)?.slug ?? "");
+  const [date, setDate] = useState((post as any)?.date ?? safeTodayISO());
+  const [category, setCategory] = useState<Category>((post as any)?.category ?? "Books & Comics");
+  const [excerpt, setExcerpt] = useState((post as any)?.excerpt ?? "");
+  const [content, setContent] = useState((post as any)?.content ?? (post as any)?.body ?? (post as any)?.story ?? "");
   const [imageUrl, setImageUrl] = useState<string>(pickImage(post));
-  const [featured, setFeatured] = useState<boolean>(pickFeatured(post));
+  const [featured, setFeatured] = useState<boolean>(!!(post as any)?.featured);
+
   const [uploading, setUploading] = useState(false);
 
-  const [topic, setTopic] = useState("");
-
+  // When switching between posts, refresh fields
   useEffect(() => {
     setTitle(post?.title ?? "");
-    setSlug(post?.slug ?? "");
-    setSlugTouched(false);
-    setExcerpt(post?.excerpt ?? "");
-    setContent(post?.content ?? "");
-    setCategory((post?.category as any) ?? "Books & Comics");
+    setSlug((post as any)?.slug ?? "");
+    setDate((post as any)?.date ?? safeTodayISO());
+    setCategory((post as any)?.category ?? "Books & Comics");
+    setExcerpt((post as any)?.excerpt ?? "");
+    setContent((post as any)?.content ?? (post as any)?.body ?? (post as any)?.story ?? "");
     setImageUrl(pickImage(post));
-    setFeatured(pickFeatured(post));
-    setTopic("");
-  }, [postKey]);
+    setFeatured(!!(post as any)?.featured);
+  }, [post]);
 
+  const derivedSlug = useMemo(() => slugify(title), [title]);
+
+  // If slug is empty, show derived slug in UI; but don't overwrite user's manual slug unless it's empty
   useEffect(() => {
-    if (!slugTouched) {
-      setSlug(slugify(title));
+    if (!slug.trim() && title.trim()) setSlug(derivedSlug);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [derivedSlug]);
+
+  if (!isOpen) return null;
+
+  const onSubmit = () => {
+    const cleanTitle = title.trim();
+    if (!cleanTitle) {
+      alert("Title is required.");
+      return;
     }
-  }, [title, slugTouched]);
 
-  const urlPreview = useMemo(() => {
-    const s = (slug || "").trim();
-    return s ? `/articles/${s}` : "/articles/your-article-slug";
-  }, [slug]);
+    const cleanSlug = slugify(slug || derivedSlug);
+    if (!cleanSlug) {
+      alert("Slug is required.");
+      return;
+    }
 
-  const handlePublishLive = () => {
-    if (!title.trim()) return alert("Headline is required.");
-    if (!slug.trim()) return alert("Slug is required.");
-    if (!excerpt.trim()) return alert("Excerpt is required.");
-    if (!content.trim()) return alert("Content is required.");
+    const cleanImage = (imageUrl || "").trim();
+    if (!isProbablyUrl(cleanImage)) {
+      alert("Hero Image must be a full URL starting with http:// or https://");
+      return;
+    }
 
-    onSave({
-      id: post?.id ?? String(Date.now()),
-      title: title.trim(),
-      slug: slug.trim(),
-      excerpt: excerpt.trim(),
-      content: content.trim(),
-      date: post?.date ?? safeTodayISO(),
+    const next: any = {
+      ...(post ?? {}),
+      title: cleanTitle,
+      slug: cleanSlug,
+      date: (date || safeTodayISO()).trim(),
       category,
-      imageUrl: imageUrl.trim() || undefined,
-      isFeatured: featured ? 1 : 0,
-      IsFeatured: featured ? 1 : 0,
-      status: (post as any)?.status ?? "published",
-      byline: (post as any)?.byline ?? "NerdX",
-    } as Post);
+      excerpt: excerpt.trim(),
+      content: (content || "").trim(),
+      imageUrl: cleanImage || undefined, // normalize field name used by renderer
+      featured: !!featured,
+    };
+
+    // Ensure it has an id for new posts if your app expects one
+    if (!next.id) next.id = (post as any)?.id;
+
+    onSave(next as Post);
+    onClose();
   };
 
   return (
-    <div className="fixed inset-0 z-[200] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="w-full max-w-3xl bg-[#0b0b0d] border border-zinc-800 shadow-2xl relative max-h-[92vh] overflow-hidden">
-        <div className="flex items-start justify-between px-6 py-5 border-b border-zinc-800">
+    <div className="fixed inset-0 z-50 bg-black/80 flex items-start justify-center overflow-auto py-10">
+      <div className="w-[92vw] max-w-5xl bg-zinc-950 border border-zinc-800 rounded-2xl shadow-2xl p-6">
+        <div className="flex items-start justify-between gap-4">
           <div>
-            <div className="text-orange-500 font-black tracking-[0.18em] uppercase text-sm">
-              {isEditing ? "Edit Field Intel" : "New Field Intel"}
+            <div className="text-xs text-zinc-500 uppercase tracking-widest font-black">
+              Field Intel
             </div>
-            <div className="text-[10px] text-zinc-500 font-mono mt-1">
-              LIVE publish workflow (D1 via /posts)
+            <div className="text-2xl text-white font-black mt-1">
+              {post ? "Edit Article" : "New Article"}
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="text-zinc-400 hover:text-white text-xs tracking-widest uppercase"
-          >
-            Close
-          </button>
+
+          <div className="flex gap-2">
+            <button
+              onClick={onClose}
+              className="bg-zinc-900 border border-zinc-800 text-zinc-200 px-4 py-2 text-xs font-black uppercase tracking-widest rounded"
+            >
+              Close
+            </button>
+            <button
+              onClick={onSubmit}
+              className="bg-orange-600 text-black px-4 py-2 text-xs font-black uppercase tracking-widest rounded"
+            >
+              Save
+            </button>
+          </div>
         </div>
 
-        <div className="overflow-y-auto max-h-[calc(92vh-140px)] px-6 py-6 space-y-6">
-          {/* Headline */}
+        <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <div className="text-[10px] text-zinc-500 uppercase tracking-widest font-bold mb-2">
-              Headline
+              Title
             </div>
             <input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               className="w-full bg-black border border-zinc-800 px-3 py-3 text-white outline-none"
+              placeholder="Enter title..."
             />
           </div>
 
-          {/* Slug */}
           <div>
             <div className="text-[10px] text-zinc-500 uppercase tracking-widest font-bold mb-2">
               Slug
             </div>
             <input
               value={slug}
-              onChange={(e) => {
-                setSlugTouched(true);
-                setSlug(slugify(e.target.value));
-              }}
-              className="w-full bg-black border border-zinc-800 px-3 py-3 text-white outline-none font-mono"
+              onChange={(e) => setSlug(e.target.value)}
+              className="w-full bg-black border border-zinc-800 px-3 py-3 text-white outline-none font-mono text-sm"
+              placeholder={derivedSlug || "auto-generated-from-title"}
             />
-            <div className="mt-2 text-[10px] text-zinc-500 font-mono">
-              URL: <span className="text-zinc-300">{urlPreview}</span>
-            </div>
           </div>
 
-          {/* Excerpt */}
+          <div>
+            <div className="text-[10px] text-zinc-500 uppercase tracking-widest font-bold mb-2">
+              Date
+            </div>
+            <input
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              className="w-full bg-black border border-zinc-800 px-3 py-3 text-white outline-none font-mono text-sm"
+              placeholder="YYYY-MM-DD"
+            />
+          </div>
+
           <div>
             <div className="text-[10px] text-zinc-500 uppercase tracking-widest font-bold mb-2">
               Excerpt
@@ -164,127 +189,130 @@ export default function Editor({ post, onSave, onClose }: EditorProps) {
               value={excerpt}
               onChange={(e) => setExcerpt(e.target.value)}
               className="w-full min-h-[90px] bg-black border border-zinc-800 px-3 py-3 text-white outline-none"
-            />
-          </div>
-
-          {/* Category + Image Upload */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <div className="text-[10px] text-zinc-500 uppercase tracking-widest font-bold mb-2">
-                Category
-              </div>
-              <select
-                value={category}
-                onChange={(e) => setCategory(e.target.value as any)}
-                className="w-full bg-black border border-zinc-800 px-3 py-3 text-white outline-none"
-              >
-                {CATEGORIES.map((c) => (
-                  <option key={c} value={c}>{c}</option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <div className="text-[10px] text-zinc-500 uppercase tracking-widest font-bold mb-2">
-                Hero Image
-              </div>
-
-              <input
-                value={imageUrl}
-                readOnly
-                className="w-full bg-black border border-zinc-800 px-3 py-2 text-white outline-none font-mono text-xs"
-                placeholder="Upload an image to generate URL"
-              />
-
-              <label className="inline-block mt-2">
-                <input
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={async (e) => {
-                    const file = e.target.files?.[0];
-                    if (!file) return;
-
-                    setUploading(true);
-                    const form = new FormData();
-                    form.append("file", file);
-                    form.append("slug", slug || "untitled");
-
-                    try {
-                      const res = await fetch("/upload-image", {
-                        method: "POST",
-                        body: form,
-                      });
-                      if (!res.ok) throw new Error("Upload failed");
-                      const data = await res.json();
-                      setImageUrl(data.url);
-                    } catch (err) {
-                      alert("Image upload failed.");
-                      console.error(err);
-                    } finally {
-                      setUploading(false);
-                    }
-                  }}
-                />
-                <span className="cursor-pointer bg-orange-600 hover:bg-orange-500 text-black px-4 py-2 text-xs font-black uppercase tracking-widest">
-                  {uploading ? "Uploading..." : "Upload Image"}
-                </span>
-              </label>
-
-              {imageUrl && (
-                <img
-                  src={imageUrl}
-                  className="mt-3 max-h-32 border border-zinc-800"
-                />
-              )}
-            </div>
-          </div>
-
-          {/* Featured */}
-          <div className="flex gap-3 items-start">
-            <input
-              type="checkbox"
-              checked={featured}
-              onChange={(e) => setFeatured(e.target.checked)}
-            />
-            <div>
-              <div className="text-[11px] text-zinc-200 uppercase tracking-widest font-black">
-                Featured
-              </div>
-              <div className="text-[10px] text-zinc-500">
-                Front page hero article
-              </div>
-            </div>
-          </div>
-
-          {/* Content */}
-          <div>
-            <div className="text-[10px] text-zinc-500 uppercase tracking-widest font-bold mb-2">
-              Full Story
-            </div>
-            <textarea
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
-              className="w-full min-h-[260px] bg-black border border-zinc-800 px-3 py-3 text-white outline-none font-mono text-sm"
+              placeholder="Short teaser used on cards..."
             />
           </div>
         </div>
 
-        <div className="border-t border-zinc-800 px-6 py-4 flex justify-between">
-          <button
-            onClick={onClose}
-            className="text-zinc-400 hover:text-white text-xs font-black uppercase tracking-widest"
-          >
-            Abort
-          </button>
-          <button
-            onClick={handlePublishLive}
-            className="bg-orange-600 hover:bg-orange-500 text-black px-5 py-2 text-xs font-black uppercase tracking-[0.2em]"
-          >
-            Publish (Live)
-          </button>
+        {/* Category + Image Upload */}
+        <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <div className="text-[10px] text-zinc-500 uppercase tracking-widest font-bold mb-2">
+              Category
+            </div>
+            <select
+              value={category}
+              onChange={(e) => setCategory(e.target.value as any)}
+              className="w-full bg-black border border-zinc-800 px-3 py-3 text-white outline-none"
+            >
+              {CATEGORIES.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <div className="text-[10px] text-zinc-500 uppercase tracking-widest font-bold mb-2">
+              Hero Image
+            </div>
+
+            {/* FIXED: pasteable field */}
+            <input
+              value={imageUrl}
+              onChange={(e) => setImageUrl(e.target.value)}
+              className="w-full bg-black border border-zinc-800 px-3 py-2 text-white outline-none font-mono text-xs"
+              placeholder="Paste image URL here (https://images.nerdxnews.com/...) or upload below"
+            />
+
+            <label className="inline-block mt-2">
+              <input
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+
+                  try {
+                    setUploading(true);
+
+                    const form = new FormData();
+                    form.append("file", file);
+
+                    const res = await fetch("/upload-image", {
+                      method: "POST",
+                      body: form,
+                    });
+
+                    if (!res.ok) throw new Error(`Upload failed: ${res.status}`);
+
+                    const data = await res.json();
+                    setImageUrl((data?.url || "").toString());
+                  } catch (err) {
+                    alert("Image upload failed.");
+                    console.error(err);
+                  } finally {
+                    setUploading(false);
+                    // allow re-uploading same file if needed
+                    (e.target as HTMLInputElement).value = "";
+                  }
+                }}
+              />
+              <span className="cursor-pointer bg-orange-600 text-black px-4 py-2 text-xs font-black uppercase tracking-widest rounded inline-block">
+                {uploading ? "Uploading..." : "Upload Image"}
+              </span>
+            </label>
+
+            {imageUrl && (
+              <div className="mt-2 border border-zinc-800 rounded overflow-hidden">
+                <img
+                  src={imageUrl}
+                  alt="Hero preview"
+                  className="w-full max-h-[220px] object-cover"
+                  onError={() => {
+                    // Don’t block saving; just tell you preview failed
+                    console.warn("Hero image preview failed to load:", imageUrl);
+                  }}
+                />
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Featured */}
+        <div className="mt-4 flex gap-3 items-start">
+          <input
+            type="checkbox"
+            checked={featured}
+            onChange={(e) => setFeatured(e.target.checked)}
+          />
+          <div>
+            <div className="text-[11px] text-zinc-200 uppercase tracking-widest font-black">
+              Featured
+            </div>
+            <div className="text-[10px] text-zinc-500">
+              Front page hero article
+            </div>
+          </div>
+        </div>
+
+        {/* Content */}
+        <div className="mt-4">
+          <div className="text-[10px] text-zinc-500 uppercase tracking-widest font-bold mb-2">
+            Full Story
+          </div>
+          <textarea
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            className="w-full min-h-[260px] bg-black border border-zinc-800 px-3 py-3 text-white outline-none font-mono text-sm"
+            placeholder="Paste the full story here..."
+          />
         </div>
       </div>
     </div>
   );
-}
+};
+
+export default Editor;
