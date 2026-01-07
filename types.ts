@@ -19,7 +19,19 @@ export type SiteCategory =
  * Category stored on a Post.
  * Supports both legacy + current values so old content doesn't break.
  */
-export type Category = LegacyCategory | SiteCategory;
+export type Category =
+  | "All"
+  | "Books & Comics"
+  | "Tabletop Games & RPGs"
+  | "Video Games"
+  | "Movies"
+  | "Television"
+  | "Pop Culture";
+
+export type ContentBlock =
+  | { type: "p"; text: string }
+  | { type: "img"; url: string; alt?: string; caption?: string };
+
 
 /** UI filter category (adds "All") */
 export type CategoryFilter = 'All' | Category;
@@ -33,6 +45,7 @@ export interface Post {
   title: string;
   excerpt: string;
   content: string;
+  contentBlocks?: ContentBlock[];
   date: string;
 
   /** Posts must belong to a real category, not "All" */

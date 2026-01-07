@@ -1,6 +1,15 @@
-# Don’t rewrite backend endpoints used by the Editor
-/posts          /posts          200
-/upload-image   /upload-image   200
+# Keep backend endpoints from being rewritten to index.html
+/posts /posts 200
+/posts/* /posts/:splat 200
 
-# SPA fallback for everything else
+/upload-image /upload-image 200
+/upload-image/* /upload-image/:splat 200
 
+/health /health 200
+/health/* /health/:splat 200
+
+/articles /articles 200
+/articles/* /articles/:splat 200
+
+# SPA fallback (this is the important one)
+/* /index.html 200

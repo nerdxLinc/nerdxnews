@@ -1,93 +1,172 @@
-/// <reference types="@cloudflare/workers-types" />
 // functions/posts.ts
-// Cloudflare Pages Function: /posts
-
-type Env = { DB: D1Database };
-
-function json(data: unknown, status = 200): Response {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: {
-      "content-type": "application/json; charset=utf-8",
-      "cache-control": "no-store",
-    },
-  });
-}
-
-function s(v: unknown): string {
-  return typeof v === "string" ? v.trim() : "";
-}
-
-function boolInt(v: unknown): number {
-  if (v === true) return 1;
-  if (v === false) return 0;
-  if (v === 1 || v === 0) return v;
-  const t = s(v).toLowerCase();
-  if (t === "1" || t === "true" || t === "yes") return 1;
-  if (t === "0" || t === "false" || t === "no") return 0;
-  return 0;
-}
-
-export const onRequest = async (context: { request: Request; env: Env }) => {
+export const onRequest = async (context: any) => {
   const { request, env } = context;
+  const db = env.DB as D1Database;
 
-  if (!env.DB) return json({ error: "Missing D1 binding: DB" }, 500);
-
-  const url = new URL(request.url);
-
+  // GET /posts
+  // - default: published only
+  // - ?admin=true : include drafts
+  // - ?slug=...   : fetch single post (published-only unless admin=true)
   if (request.method === "GET") {
+    const url = new URL(request.url);
     const admin = url.searchParams.get("admin") === "true";
-    const slug = s(url.searchParams.get("slug"));
+    const slug = (url.searchParams.get("slug") || "").trim();
 
     try {
       if (slug) {
-        const row = await env.DB
-          .prepare(
-            admin
-              ? "SELECT * FROM posts WHERE slug = ? LIMIT 1"
-              : "SELECT * FROM posts WHERE slug = ? AND status = 'published' LIMIT 1"
-          )
-          .bind(slug)
-          .first();
+        const row = admin
+          ? await db
+              .prepare(
+                `
+                SELECT *
+                FROM posts
+                WHERE slug = ?
+                LIMIT 1
+              `
+              )
+              .bind(slug)
+              .first()
+          : await db
+              .prepare(
+                `
+                SELECT *
+                FROM posts
+                WHERE slug = ?
+                  AND status = 'published'
+                LIMIT 1
+              `
+              )
+              .bind(slug)
+              .first();
 
-        return json({ post: row ?? null }, 200);
+        return json({ post: row ?? null });
       }
 
-      const sql = admin
-        ? "SELECT * FROM posts ORDER BY isFeatured DESC, date DESC, updated_at DESC"
-        : "SELECT * FROM posts WHERE status = 'published' ORDER BY isFeatured DESC, date DESC, updated_at DESC";
+      const query = admin
+        ? `
+          SELECT *
+          FROM posts
+          ORDER BY isFeatured DESC, date DESC, updated_at DESC
+        `
+        : `
+          SELECT *
+          FROM posts
+          WHERE status = 'published'
+          ORDER BY isFeatured DESC, date DESC, updated_at DESC
+        `;
 
-      const out = await env.DB.prepare(sql).all();
-      return json({ posts: out.results ?? [] }, 200);
-    } catch (e) {
-      return json({ error: String((e as any)?.message ?? e) }, 500);
+      const { results } = await db.prepare(query).all();
+      return json({ posts: results ?? [] });
+    } catch (err: any) {
+      return json({ error: String(err?.message ?? err) }, 500);
     }
   }
 
+  // POST /posts
+  // Fix: if an existing row is identified by id, UPDATE by id
+  // so changing slug doesn't trip UNIQUE(posts.id).
   if (request.method === "POST") {
     try {
       const body = await request.json();
 
-      const slug = s(body?.slug);
-      if (!slug) return json({ error: "Missing slug" }, 400);
+      const {
+        id,
+        slug,
+        title,
+        excerpt,
+        content,
+        imageUrl,
+        date,
+        category,
+        isFeatured,
+        status,
+        byline,
+      } = body ?? {};
 
-      const title = s(body?.title);
-      const excerpt = s(body?.excerpt);
-      const content = s(body?.content);
+      const cleanId = String(id || "").trim(); // can be empty for "new"
+      const cleanSlug = String(slug || "").trim();
+      const cleanTitle = String(title || "").trim();
+      const cleanContent = String(content || "").trim();
 
-      if (!title) return json({ error: "Missing title" }, 400);
-      if (!content) return json({ error: "Missing content" }, 400);
+      if (!cleanSlug || !cleanTitle || !cleanContent) {
+        return json(
+          { error: "Missing required fields: slug, title, content" },
+          400
+        );
+      }
 
-      const id = s(body?.id) || null;
-      const category = s(body?.category);
-      const date = s(body?.date);
-      const status = s(body?.status) || "draft";
-      const byline = s(body?.byline);
+      const featuredFlag = isFeatured ? 1 : 0;
 
-      const imageUrl = s(body?.imageUrl || body?.image || body?.heroImage);
-      const isFeatured = boolInt(body?.isFeatured);
+      // Enforce "only one featured post"
+      if (featuredFlag === 1) {
+        await db
+          .prepare(`UPDATE posts SET isFeatured = 0 WHERE isFeatured = 1`)
+          .run();
+      }
 
-      await env.DB
+      // If client sent an id, and that id exists, UPDATE BY ID (allows slug changes)
+      if (cleanId) {
+        const existingById = await db
+          .prepare(`SELECT id, slug FROM posts WHERE id = ? LIMIT 1`)
+          .bind(cleanId)
+          .first();
+
+        if (existingById) {
+          // Prevent slug collision with another row
+          const slugClash = await db
+            .prepare(
+              `SELECT id FROM posts WHERE slug = ? AND id != ? LIMIT 1`
+            )
+            .bind(cleanSlug, cleanId)
+            .first();
+
+          if (slugClash) {
+            return json(
+              { error: "Slug already exists for another post." },
+              409
+            );
+          }
+
+          await db
+            .prepare(
+              `
+              UPDATE posts
+              SET
+                slug = ?,
+                title = ?,
+                excerpt = ?,
+                content = ?,
+                imageUrl = ?,
+                date = ?,
+                category = ?,
+                isFeatured = ?,
+                status = ?,
+                byline = ?,
+                updated_at = datetime('now')
+              WHERE id = ?
+            `
+            )
+            .bind(
+              cleanSlug,
+              cleanTitle,
+              String(excerpt ?? ""),
+              cleanContent,
+              String(imageUrl ?? ""),
+              String(date ?? ""),
+              String(category ?? ""),
+              featuredFlag,
+              String(status ?? "published"),
+              String(byline ?? ""),
+              cleanId
+            )
+            .run();
+
+          return json({ success: true, slug: cleanSlug });
+        }
+      }
+
+      // Otherwise: insert new row (or upsert by slug if same slug exists)
+      await db
         .prepare(
           `
           INSERT INTO posts (
@@ -118,26 +197,36 @@ export const onRequest = async (context: { request: Request; env: Env }) => {
         `
         )
         .bind(
-          id,
-          slug,
-          title,
-          excerpt,
-          content,
-          imageUrl,
-          date,
-          category,
-          isFeatured,
-          status,
-          byline,
-          slug
+          cleanId || null,
+          cleanSlug,
+          cleanTitle,
+          String(excerpt ?? ""),
+          cleanContent,
+          String(imageUrl ?? ""),
+          String(date ?? ""),
+          String(category ?? ""),
+          featuredFlag,
+          String(status ?? "published"),
+          String(byline ?? ""),
+          cleanSlug
         )
         .run();
 
-      return json({ ok: true }, 200);
-    } catch (e) {
-      return json({ error: String((e as any)?.message ?? e) }, 500);
+      return json({ success: true, slug: cleanSlug });
+    } catch (err: any) {
+      return json({ error: String(err?.message ?? err) }, 500);
     }
   }
 
-  return new Response("Method Not Allowed", { status: 405 });
+  return json({ error: "Method Not Allowed" }, 405);
 };
+
+function json(data: any, status = 200) {
+  return new Response(JSON.stringify(data, null, 2), {
+    status,
+    headers: {
+      "Content-Type": "application/json; charset=utf-8",
+      "Cache-Control": "no-store",
+    },
+  });
+}

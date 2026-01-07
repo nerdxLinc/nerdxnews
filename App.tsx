@@ -11,6 +11,26 @@ import Editor from './components/Editor';
 import { Post, Category } from './types';
 import { INITIAL_POSTS } from './constants';
 
+function decodeContentBlocks(content?: unknown): ContentBlock[] | undefined {
+  const s = (content ?? '').toString().trim();
+  if (!s) return undefined;
+  if (s.startsWith('{') && s.endsWith('}')) {
+    try {
+      const obj = JSON.parse(s);
+      if (obj?.type === 'blocks' && Array.isArray(obj?.blocks)) return obj.blocks as ContentBlock[];
+    } catch {
+      return undefined;
+    }
+  }
+  return undefined;
+}
+
+function encodeContentBlocks(blocks?: ContentBlock[]): string | undefined {
+  if (!blocks || blocks.length === 0) return undefined;
+  return JSON.stringify({ type: 'blocks', blocks });
+}
+
+
 type AppProps = {
   routeSlug?: string;
 };
@@ -112,7 +132,7 @@ async function fetchPostBySlugFromServer(slug: string, admin: boolean): Promise<
 }
 
 async function postToServer(payload: any): Promise<{ success: boolean; slug?: string }> {
-  const res = await fetch('/posts', {
+const res = await fetch('/posts', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -337,6 +357,10 @@ const App: React.FC<AppProps> = ({ routeSlug }) => {
     };
 
     try {
+      // Persist inline blocks by serializing them into the DB-backed content column
+      payload.content = encodeContentBlocks((updatedPost as any).contentBlocks) || payload.content || '';
+      delete payload.contentBlocks;
+
       await postToServer(payload);
 
       const list = await fetchPostsFromServer(true);
