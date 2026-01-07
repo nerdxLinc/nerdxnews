@@ -73,9 +73,9 @@ const PostDetail: React.FC<Props> = ({ post, onBack, isAdmin }) => {
   const metaDate = useMemo(() => pickDate(post as any), [post]);
   const metaCategory = useMemo(() => pickCategory(post as any), [post]);
 
-  const paragraphs = useMemo(() => {
+  const blocks = useMemo(() => {
     const raw = pickContent(post as any);
-    if (!raw || typeof raw !== 'string') return [];
+    if (!raw || typeof raw !== 'string') return [] as string[];
 
     return raw
       .replace(/\r\n/g, '\n')
@@ -84,6 +84,54 @@ const PostDetail: React.FC<Props> = ({ post, onBack, isAdmin }) => {
       .map((p) => p.trim())
       .filter(Boolean);
   }, [post]);
+
+  const renderInlineMarkdown = (text: string) => {
+    const nodes: React.ReactNode[] = [];
+    const regex = /!\[([^\]]*)\]\(([^)\s]+)(?:\s+"(left|right|center)")?\)/g;
+    let lastIndex = 0;
+    let match: RegExpExecArray | null;
+
+    while ((match = regex.exec(text)) !== null) {
+      const [full, alt, url, align] = match;
+      const start = match.index;
+      if (start > lastIndex) {
+        nodes.push(text.slice(lastIndex, start));
+      }
+
+      const src = normalizeImagePath(url.trim());
+      if (src) {
+        const alignment = (align || "center").toLowerCase();
+        const alignmentClass =
+          alignment === "left"
+            ? "float-left mr-4"
+            : alignment === "right"
+              ? "float-right ml-4"
+              : "mx-auto";
+        nodes.push(
+          <img
+            key={`${src}-${start}`}
+            src={src}
+            alt={alt || 'Inline image'}
+            className={`my-4 w-full max-w-xs md:max-w-sm rounded-xl border border-zinc-800 object-cover ${alignmentClass}`}
+            loading="lazy"
+            onError={(e) => {
+              (e.currentTarget as HTMLImageElement).style.display = 'none';
+            }}
+          />
+        );
+      } else {
+        nodes.push(full);
+      }
+
+      lastIndex = start + full.length;
+    }
+
+    if (lastIndex < text.length) {
+      nodes.push(text.slice(lastIndex));
+    }
+
+    return nodes;
+  };
 
   const shareUrl = useMemo(() => {
     if (typeof window === 'undefined') return '';
@@ -220,11 +268,11 @@ const PostDetail: React.FC<Props> = ({ post, onBack, isAdmin }) => {
 
       {/* Body */}
       <div className="max-w-3xl mx-auto px-4 md:px-6 pb-16 md:pb-24 pt-10">
-        {paragraphs.length > 0 ? (
-          <div className="space-y-6 text-zinc-200 text-base md:text-lg leading-relaxed">
-            {paragraphs.map((p, idx) => (
-              <p key={idx} className="whitespace-pre-wrap">
-                {p}
+        {blocks.length > 0 ? (
+          <div className="space-y-6 text-zinc-200 text-base md:text-lg leading-relaxed break-words">
+            {blocks.map((p, idx) => (
+              <p key={idx} className="whitespace-pre-wrap break-words after:content-[''] after:block after:clear-both">
+                {renderInlineMarkdown(p)}
               </p>
             ))}
           </div>

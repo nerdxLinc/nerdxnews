@@ -1,6 +1,0 @@
-# Don’t rewrite backend endpoints used by the Editor
-/posts          /posts          200
-/upload-image   /upload-image   200
-
-# SPA fallback for everything else
-
