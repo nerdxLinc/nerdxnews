@@ -38,7 +38,7 @@ function pickImage(p: any): string {
 function isProbablyUrl(v: string): boolean {
   const s = (v || "").trim();
   if (!s) return true;
-  return /^https?:\/\/.+/i.test(s);
+  return /^(https?:\/\/|data:|blob:).+/i.test(s);
 }
 
 const Editor: React.FC<EditorProps> = ({ post, onSave, onClose }) => {
@@ -54,6 +54,9 @@ const Editor: React.FC<EditorProps> = ({ post, onSave, onClose }) => {
   const [featured, setFeatured] = useState<boolean>(!!(post as any)?.featured);
 
   const [uploading, setUploading] = useState(false);
+  const [inlineAlt, setInlineAlt] = useState("");
+  const [inlineUrl, setInlineUrl] = useState("");
+  const [inlineAlign, setInlineAlign] = useState<"left" | "right" | "center">("left");
 
   // When switching between posts, refresh fields
   useEffect(() => {
@@ -65,6 +68,9 @@ const Editor: React.FC<EditorProps> = ({ post, onSave, onClose }) => {
     setContent((post as any)?.content ?? (post as any)?.body ?? (post as any)?.story ?? "");
     setImageUrl(pickImage(post));
     setFeatured(!!(post as any)?.featured);
+    setInlineAlt("");
+    setInlineUrl("");
+    setInlineAlign("left");
   }, [post]);
 
   const derivedSlug = useMemo(() => slugify(title), [title]);
@@ -76,6 +82,86 @@ const Editor: React.FC<EditorProps> = ({ post, onSave, onClose }) => {
   }, [derivedSlug]);
 
   if (!isOpen) return null;
+
+  const insertAtCursor = (text: string) => {
+    const textarea = document.getElementById("editor-content") as HTMLTextAreaElement | null;
+    if (!textarea) {
+      setContent((prev) => `${prev}\n\n${text}`.trim());
+      return;
+    }
+
+    const start = textarea.selectionStart ?? 0;
+    const end = textarea.selectionEnd ?? 0;
+    setContent((prev) => {
+      const before = prev.slice(0, start);
+      const after = prev.slice(end);
+      return `${before}${text}${after}`;
+    });
+
+    window.requestAnimationFrame(() => {
+      const nextPos = start + text.length;
+      textarea.focus();
+      textarea.setSelectionRange(nextPos, nextPos);
+    });
+  };
+
+  const handleInlineInsert = () => {
+    const url = inlineUrl.trim();
+    if (!url) {
+      alert("Inline image URL is required.");
+      return;
+    }
+    if (!isProbablyUrl(url)) {
+      alert("Inline image must be a full URL (http/https) or a data/blob URL.");
+      return;
+    }
+
+    const alt = inlineAlt.trim() || "Inline image";
+    const tag = `![${alt}](${url} "${inlineAlign}")`;
+    insertAtCursor(tag);
+    setInlineAlt("");
+    setInlineUrl("");
+  };
+
+  const handleInlineUpload = async (file: File) => {
+    try {
+      setUploading(true);
+
+      const form = new FormData();
+      form.append("file", file);
+
+      const res = await fetch("/upload-image", {
+        method: "POST",
+        body: form,
+      });
+
+      if (!res.ok) throw new Error(`Upload failed: ${res.status}`);
+
+      const data = await res.json();
+      const url = (data?.url || "").toString().trim();
+      if (!url) throw new Error("Upload succeeded but no URL returned.");
+
+      setInlineUrl(url);
+      return;
+    } catch (err) {
+      console.error(err);
+      const reader = new FileReader();
+      reader.onload = () => {
+        const dataUrl = typeof reader.result === "string" ? reader.result : "";
+        if (dataUrl) {
+          setInlineUrl(dataUrl);
+          alert(
+            "Cloudflare upload failed. Using a local data URL for preview only. Paste a public URL for production."
+          );
+        } else {
+          alert("Image upload failed.");
+        }
+      };
+      reader.readAsDataURL(file);
+    } finally {
+      setUploading(false);
+    }
+  };
 
   const onSubmit = () => {
     const cleanTitle = title.trim();
@@ -92,7 +178,7 @@ const Editor: React.FC<EditorProps> = ({ post, onSave, onClose }) => {
 
     const cleanImage = (imageUrl || "").trim();
     if (!isProbablyUrl(cleanImage)) {
-      alert("Hero Image must be a full URL starting with http:// or https://");
+      alert("Hero Image must be a full URL (http/https) or a data/blob URL.");
       return;
     }
 
@@ -251,8 +337,20 @@ const Editor: React.FC<EditorProps> = ({ post, onSave, onClose }) => {
                     const data = await res.json();
                     setImageUrl((data?.url || "").toString());
                   } catch (err) {
-                    alert("Image upload failed.");
                     console.error(err);
+                    const reader = new FileReader();
+                    reader.onload = () => {
+                      const dataUrl = typeof reader.result === "string" ? reader.result : "";
+                      if (dataUrl) {
+                        setImageUrl(dataUrl);
+                        alert(
+                          "Cloudflare upload failed. Using a local data URL for preview only. Paste a public URL for production."
+                        );
+                      } else {
+                        alert("Image upload failed.");
+                      }
+                    };
+                    reader.readAsDataURL(file);
                   } finally {
                     setUploading(false);
                     // allow re-uploading same file if needed
@@ -303,11 +401,61 @@ const Editor: React.FC<EditorProps> = ({ post, onSave, onClose }) => {
           <div className="text-[10px] text-zinc-500 uppercase tracking-widest font-bold mb-2">
             Full Story
           </div>
+          <div className="mb-3 grid grid-cols-1 md:grid-cols-[1fr_auto_auto] gap-2">
+            <input
+              value={inlineAlt}
+              onChange={(e) => setInlineAlt(e.target.value)}
+              className="w-full bg-black border border-zinc-800 px-3 py-2 text-white outline-none text-xs"
+              placeholder="Inline image alt text"
+            />
+            <select
+              value={inlineAlign}
+              onChange={(e) => setInlineAlign(e.target.value as "left" | "right" | "center")}
+              className="bg-black border border-zinc-800 px-3 py-2 text-white outline-none text-xs"
+            >
+              <option value="left">Float left</option>
+              <option value="right">Float right</option>
+              <option value="center">Center</option>
+            </select>
+            <button
+              type="button"
+              onClick={handleInlineInsert}
+              className="bg-orange-600 text-black px-4 py-2 text-xs font-black uppercase tracking-widest rounded"
+            >
+              Insert Inline Image
+            </button>
+          </div>
+          <div className="mb-3 grid grid-cols-1 md:grid-cols-[1fr_auto] gap-2">
+            <input
+              value={inlineUrl}
+              onChange={(e) => setInlineUrl(e.target.value)}
+              className="w-full bg-black border border-zinc-800 px-3 py-2 text-white outline-none font-mono text-xs"
+              placeholder="Paste inline image URL (https://...)"
+            />
+            <label className="inline-flex items-center">
+              <input
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  handleInlineUpload(file).finally(() => {
+                    (e.target as HTMLInputElement).value = "";
+                  });
+                }}
+              />
+              <span className="cursor-pointer bg-zinc-900 text-white px-4 py-2 text-xs font-black uppercase tracking-widest rounded border border-zinc-700">
+                {uploading ? "Uploading..." : "Upload Inline"}
+              </span>
+            </label>
+          </div>
           <textarea
+            id="editor-content"
             value={content}
             onChange={(e) => setContent(e.target.value)}
             className="w-full min-h-[260px] bg-black border border-zinc-800 px-3 py-3 text-white outline-none font-mono text-sm"
-            placeholder="Paste the full story here..."
+            placeholder='Paste the full story here... (Inline: ![alt](https://... "left|right|center"))'
           />
         </div>
       </div>
