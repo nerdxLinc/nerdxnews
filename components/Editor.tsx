@@ -38,7 +38,7 @@ function pickImage(p: any): string {
 function isProbablyUrl(v: string): boolean {
   const s = (v || "").trim();
   if (!s) return true;
-  return /^https?:\/\/.+/i.test(s);
+  return /^(https?:\/\/|data:|blob:).+/i.test(s);
 }
 
 const Editor: React.FC<EditorProps> = ({ post, onSave, onClose }) => {
@@ -112,7 +112,7 @@ const Editor: React.FC<EditorProps> = ({ post, onSave, onClose }) => {
       return;
     }
     if (!isProbablyUrl(url)) {
-      alert("Inline image must be a full URL starting with http:// or https://");
+      alert("Inline image must be a full URL (http/https) or a data/blob URL.");
       return;
     }
 
@@ -178,7 +178,7 @@ const Editor: React.FC<EditorProps> = ({ post, onSave, onClose }) => {
 
     const cleanImage = (imageUrl || "").trim();
     if (!isProbablyUrl(cleanImage)) {
-      alert("Hero Image must be a full URL starting with http:// or https://");
+      alert("Hero Image must be a full URL (http/https) or a data/blob URL.");
       return;
     }
 
