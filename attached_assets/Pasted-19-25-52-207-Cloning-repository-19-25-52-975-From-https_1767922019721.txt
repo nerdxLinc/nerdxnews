@@ -1,0 +1,60 @@
+19:25:52.207	Cloning repository...
+19:25:52.975	From https://github.com/nerdxLinc/nerdxnews
+19:25:52.976	 * branch            6e84fd48e19e89e2670883fd61237ddb1422861d -> FETCH_HEAD
+19:25:52.976	
+19:25:53.013	HEAD is now at 6e84fd4 Add image alignment and YouTube embed functionality to the editor
+19:25:53.014	
+19:25:53.093	
+19:25:53.094	Using v2 root directory strategy
+19:25:53.116	Success: Finished cloning repository files
+19:25:54.975	Checking for configuration in a Wrangler configuration file (BETA)
+19:25:54.976	
+19:25:56.082	No wrangler.toml file found. Continuing.
+19:25:56.154	Detected the following tools from environment: npm@10.9.2, nodejs@22.16.0
+19:25:56.155	Installing project dependencies: npm clean-install --progress=false
+19:26:00.728	
+19:26:00.729	added 169 packages, and audited 170 packages in 4s
+19:26:00.729	
+19:26:00.729	46 packages are looking for funding
+19:26:00.729	  run `npm fund` for details
+19:26:00.754	
+19:26:00.754	4 vulnerabilities (3 moderate, 1 high)
+19:26:00.755	
+19:26:00.755	To address issues that do not require attention, run:
+19:26:00.755	  npm audit fix
+19:26:00.755	
+19:26:00.755	To address all issues (including breaking changes), run:
+19:26:00.755	  npm audit fix --force
+19:26:00.756	
+19:26:00.756	Run `npm audit` for details.
+19:26:00.778	Executing user command: npm run build
+19:26:01.186	
+19:26:01.187	> nerdxnews@0.0.1 build
+19:26:01.187	> vite build
+19:26:01.187	
+19:26:01.482	vite v5.4.21 building for production...
+19:26:01.545	transforming...
+19:26:03.467	✓ 107 modules transformed.
+19:26:03.915	rendering chunks...
+19:26:04.408	computing gzip size...
+19:26:04.446	dist/index.html                  4.24 kB │ gzip:   1.54 kB
+19:26:04.447	dist/assets/index-C7QdumRs.js  598.08 kB │ gzip: 189.93 kB │ map: 2,511.39 kB
+19:26:04.447	✓ built in 2.94s
+19:26:04.448	
+19:26:04.448	(!) Some chunks are larger than 500 kB after minification. Consider:
+19:26:04.449	- Using dynamic import() to code-split the application
+19:26:04.449	- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+19:26:04.449	- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+19:26:04.514	Finished
+19:26:05.479	Checking for configuration in a Wrangler configuration file (BETA)
+19:26:05.479	
+19:26:06.597	No wrangler.toml file found. Continuing.
+19:26:06.598	Found Functions directory at /functions. Uploading.
+19:26:06.605	 ⛅️ wrangler 3.101.0
+19:26:06.605	-------------------
+19:26:07.788	✨ Compiled Worker successfully
+19:26:08.883	Found _routes.json in output directory. Uploading.
+19:26:08.896	Validating asset output directory
+19:26:11.658	Deploying your site to Cloudflare's global network...
+19:26:13.388	Failed: an internal error occurred. If this continues, contact support: https://cfl.re/3WgEyrH
+19:26:13.383	Error: Failed to publish assets. For support, join our Discord (https://discord.gg/cloudflaredev) or create a ticket and reference the deployment ID: 36900fc8-fdcd-404e-a8d7-3ded710a255b
