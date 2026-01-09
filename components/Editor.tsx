@@ -76,6 +76,28 @@ function isProbablyUrl(v: string): boolean {
 
 const MenuBar = ({ editor }: { editor: any }) => {
   const [widthValue, setWidthValue] = React.useState('');
+  const [, forceUpdate] = React.useReducer(x => x + 1, 0);
+  
+  React.useEffect(() => {
+    if (!editor) return;
+    
+    const updateHandler = () => {
+      forceUpdate();
+      if (editor.isActive('image')) {
+        const attrs = editor.getAttributes('image');
+        const w = attrs.width || '';
+        setWidthValue(w ? String(w) : '');
+      }
+    };
+    
+    editor.on('selectionUpdate', updateHandler);
+    editor.on('transaction', updateHandler);
+    
+    return () => {
+      editor.off('selectionUpdate', updateHandler);
+      editor.off('transaction', updateHandler);
+    };
+  }, [editor]);
   
   if (!editor) return null;
 
@@ -93,13 +115,7 @@ const MenuBar = ({ editor }: { editor: any }) => {
 
   const currentFloat = getImageFloat();
   const currentWidth = getImageWidth();
-  
-  React.useEffect(() => {
-    if (editor.isActive('image')) {
-      const w = getImageWidth();
-      setWidthValue(w ? String(w) : '');
-    }
-  }, [editor.state.selection]);
+  const isImageSelected = editor.isActive('image');
 
   const addImage = useCallback(() => {
     const url = window.prompt("Enter image URL:");
@@ -274,7 +290,7 @@ const MenuBar = ({ editor }: { editor: any }) => {
 
       <div className="w-px h-6 bg-zinc-700 mx-1 self-center" />
 
-      <span className="text-[10px] text-zinc-500 self-center mr-1">Width:</span>
+      <span className={`text-[10px] self-center mr-1 ${isImageSelected ? 'text-orange-400' : 'text-zinc-500'}`}>Width:</span>
       <input
         type="number"
         min="100"
@@ -283,35 +299,36 @@ const MenuBar = ({ editor }: { editor: any }) => {
         value={widthValue}
         onChange={(e) => setWidthValue(e.target.value)}
         placeholder={currentWidth ? String(currentWidth) : 'px'}
-        className={`w-20 px-2 py-1 text-[10px] rounded border ${editor.isActive('image') ? 'bg-zinc-800 text-white border-orange-600' : 'bg-zinc-900 text-zinc-500 border-zinc-700'}`}
+        className={`w-20 px-2 py-1 text-[10px] rounded border ${isImageSelected ? 'bg-zinc-800 text-white border-orange-600' : 'bg-zinc-900 text-zinc-500 border-zinc-700'}`}
         onKeyDown={(e) => {
           if (e.key === 'Enter') {
             e.preventDefault();
             const val = parseInt(widthValue);
-            if (val && val >= 100 && val <= 1200 && editor.isActive('image')) {
+            if (val && val >= 100 && val <= 1200 && isImageSelected) {
               editor.chain().focus().updateAttributes('image', { width: val }).run();
             }
           }
         }}
-        title="Set image width (100-1200px)"
-        disabled={!editor.isActive('image')}
+        title={isImageSelected ? "Set image width (100-1200px)" : "Click an image to select it first"}
+        disabled={!isImageSelected}
       />
       <button
         type="button"
         onClick={() => {
           const val = parseInt(widthValue);
-          if (val && val >= 100 && val <= 1200 && editor.isActive('image')) {
+          if (val && val >= 100 && val <= 1200 && isImageSelected) {
             editor.chain().focus().updateAttributes('image', { width: val }).run();
-          } else if (!editor.isActive('image')) {
+          } else if (!isImageSelected) {
             alert('Click on an image first to select it, then set the width.');
           }
         }}
-        className={`px-2 py-1 text-[10px] rounded ${editor.isActive('image') ? 'bg-orange-600 text-white hover:bg-orange-500' : 'bg-zinc-800 text-zinc-500'}`}
-        title="Apply width to selected image"
+        className={`px-2 py-1 text-[10px] rounded ${isImageSelected ? 'bg-orange-600 text-white hover:bg-orange-500' : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'}`}
+        title={isImageSelected ? "Apply width to selected image" : "Select an image first"}
+        disabled={!isImageSelected}
       >
         Apply
       </button>
-      {currentWidth && <span className="text-[10px] text-zinc-400 self-center ml-1">({currentWidth}px)</span>}
+      {isImageSelected && currentWidth && <span className="text-[10px] text-orange-400 self-center ml-1">({currentWidth}px)</span>}
     </div>
   );
 };
