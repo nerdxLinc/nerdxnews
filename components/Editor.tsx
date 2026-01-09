@@ -8,6 +8,24 @@ import Placeholder from "@tiptap/extension-placeholder";
 import TextAlign from "@tiptap/extension-text-align";
 import { Post, Category } from "../types";
 
+const CustomImage = Image.extend({
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      'data-float': {
+        default: null,
+        parseHTML: element => element.getAttribute('data-float'),
+        renderHTML: attributes => {
+          if (!attributes['data-float']) {
+            return {};
+          }
+          return { 'data-float': attributes['data-float'] };
+        },
+      },
+    };
+  },
+});
+
 type EditorProps = {
   post: Post | null | undefined;
   onSave: (post: Post) => void;
@@ -91,19 +109,10 @@ const MenuBar = ({ editor }: { editor: any }) => {
   }, [uploadImage]);
 
   const setImageFloat = useCallback((float: string) => {
-    const { state, view } = editor;
-    const { selection } = state;
-    const node = state.doc.nodeAt(selection.from);
-    
-    if (node?.type.name === "image") {
-      const attrs = { ...node.attrs };
-      if (float === "none") {
-        delete attrs["data-float"];
-      } else {
-        attrs["data-float"] = float;
-      }
-      const tr = state.tr.setNodeMarkup(selection.from, null, attrs);
-      view.dispatch(tr);
+    if (float === "none") {
+      editor.chain().focus().updateAttributes('image', { 'data-float': null }).run();
+    } else {
+      editor.chain().focus().updateAttributes('image', { 'data-float': float }).run();
     }
   }, [editor]);
 
@@ -241,7 +250,7 @@ const Editor: React.FC<EditorProps> = ({ post, onSave, onClose }) => {
   const editor = useEditor({
     extensions: [
       StarterKit,
-      Image.configure({
+      CustomImage.configure({
         HTMLAttributes: {
           class: "editor-image",
         },
