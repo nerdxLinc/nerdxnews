@@ -380,7 +380,6 @@ const App: React.FC<AppProps> = ({ routeSlug }) => {
     const password = window.prompt('ENTER COMMAND CODE (Hint: nerdx)');
     if (password && password.toLowerCase() === 'nerdx') {
       setIsAdmin(true);
-      alert('ACCESS GRANTED.\n\nEditor Mode Initialized.');
 
       try {
         const list = await fetchPostsFromServer(true);
