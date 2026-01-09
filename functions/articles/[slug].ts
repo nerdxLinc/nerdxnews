@@ -65,11 +65,11 @@ function generateOgHtml(post: Post): Response {
   <meta property="og:image" content="${image}">
   <meta property="og:site_name" content="NerdXNews">
   
-  <meta property="twitter:card" content="summary_large_image">
-  <meta property="twitter:url" content="${url}">
-  <meta property="twitter:title" content="${title}">
-  <meta property="twitter:description" content="${description}">
-  <meta property="twitter:image" content="${image}">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:url" content="${url}">
+  <meta name="twitter:title" content="${title}">
+  <meta name="twitter:description" content="${description}">
+  <meta name="twitter:image" content="${image}">
   
   <script>
     if (typeof window !== 'undefined') {
@@ -110,10 +110,10 @@ function redirectToHome(): Response {
   <meta property="og:description" content="The Evolution of Nerd Culture">
   <meta property="og:image" content="https://nerdxnews.com/NerdXNews_Logo.png">
   
-  <meta property="twitter:card" content="summary_large_image">
-  <meta property="twitter:title" content="NerdXNews">
-  <meta property="twitter:description" content="The Evolution of Nerd Culture">
-  <meta property="twitter:image" content="https://nerdxnews.com/NerdXNews_Logo.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="NerdXNews">
+  <meta name="twitter:description" content="The Evolution of Nerd Culture">
+  <meta name="twitter:image" content="https://nerdxnews.com/NerdXNews_Logo.png">
   
   <script>window.location.replace('/');</script>
 </head>
