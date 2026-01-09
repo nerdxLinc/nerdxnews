@@ -4,8 +4,9 @@ type Env = {
   IMAGES: R2Bucket;
   IMAGE_BASE_URL?: string;
 };
+type Context = { request: Request; env: Env };
 
-export const onRequest = async (context: { request: Request; env: Env }) => {
+export const onRequestPost = async (context: Context) => {
   const { request, env } = context;
   const bucket = env.IMAGES;
 
@@ -14,10 +15,6 @@ export const onRequest = async (context: { request: Request; env: Env }) => {
       status: 500,
       headers: { "Content-Type": "application/json" }
     });
-  }
-
-  if (request.method !== "POST") {
-    return new Response("Method Not Allowed", { status: 405 });
   }
 
   const contentType = request.headers.get("content-type") || "";
@@ -51,7 +48,7 @@ export const onRequest = async (context: { request: Request; env: Env }) => {
       },
     });
 
-    const base = String(env.IMAGE_BASE_URL || "https://pub-nerdxnews-images.r2.dev").replace(/\/+$/, "");
+    const base = String(env.IMAGE_BASE_URL || "https://images.nerdxnews.com").replace(/\/+$/, "");
     const publicUrl = `${base}/${key}`;
 
     return new Response(JSON.stringify({ url: publicUrl }), {
@@ -59,9 +56,19 @@ export const onRequest = async (context: { request: Request; env: Env }) => {
     });
   } catch (err) {
     console.error("Upload error:", err);
-    return new Response(JSON.stringify({ error: "Upload failed" }), { 
+    return new Response(JSON.stringify({ error: "Upload failed", details: String(err) }), { 
       status: 500,
       headers: { "Content-Type": "application/json" }
     });
   }
+};
+
+export const onRequestOptions = async () => {
+  return new Response(null, {
+    headers: {
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "POST, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type",
+    },
+  });
 };
