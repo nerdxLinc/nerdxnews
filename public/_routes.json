@@ -1,10 +1,9 @@
-﻿{
+{
   "version": 1,
   "include": [
     "/posts*",
     "/upload-image*",
-    "/health*",
-    "/articles*"
+    "/health*"
   ],
   "exclude": [
     "/assets/*",
