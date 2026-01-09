@@ -72,16 +72,15 @@ function App() {
               className="hero-logo"
               onLoad={() => setIsLogoLoaded(true)}
             />
-            <div className="logo-shine"></div>
+            <div className="logo-ring"></div>
           </div>
           
           <h1 className="hero-tagline">
-            <span className="tagline-main">Signs That Get</span>
-            <span className="tagline-highlight glow-orange">Noticed</span>
+            Signs of Excellence Since 1994
           </h1>
           
           <p className="hero-subtitle">
-            Excellence in Design & Signage Since 1994
+            Custom Signs, Vehicle Wraps & Graphics
           </p>
           
           <div className="hero-cta">
@@ -101,6 +100,7 @@ function App() {
       </section>
 
       <section id="portfolio" className="portfolio section">
+        <p className="imagine-text">Imagine the Possibilities...</p>
         <h2 className="section-title">
           <span className="chrome-text">Our Portfolio</span>
         </h2>
