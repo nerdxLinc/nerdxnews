@@ -8,7 +8,7 @@ import PostDetail from './components/PostDetail';
 import Newsletter from './components/Newsletter';
 import Editor from './components/Editor';
 
-import { Post, Category } from './types';
+import { Post, Category, CategoryFilter } from './types';
 import { INITIAL_POSTS } from './constants';
 
 type AppProps = {
@@ -149,9 +149,16 @@ const App: React.FC<AppProps> = ({ routeSlug }) => {
   const navigate = useNavigate();
   const location = useLocation();
 
-  // Route slug fallback: derive from pathname if prop isn't present.
+  // Route slug fallback: derive from pathname or query param if prop isn't present.
   const effectiveRouteSlug = useMemo(() => {
     if (routeSlug && String(routeSlug).trim()) return String(routeSlug).trim();
+
+    // Check for ?article=slug query parameter (from OG redirects)
+    const params = new URLSearchParams(location.search);
+    const articleParam = params.get('article');
+    if (articleParam && articleParam.trim()) {
+      return articleParam.trim();
+    }
 
     const path = (location.pathname || '').trim();
     const prefix = '/articles/';
@@ -165,7 +172,7 @@ const App: React.FC<AppProps> = ({ routeSlug }) => {
       }
     }
     return '';
-  }, [routeSlug, location.pathname]);
+  }, [routeSlug, location.pathname, location.search]);
 
   const [posts, setPosts] = useState<Post[]>(() => {
     if (typeof window === 'undefined') return ensureSlugs(INITIAL_POSTS);
@@ -184,7 +191,7 @@ const App: React.FC<AppProps> = ({ routeSlug }) => {
   });
 
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
-  const [activeCategory, setActiveCategory] = useState<Category>('All');
+  const [activeCategory, setActiveCategory] = useState<CategoryFilter>('All');
   const [isAdmin, setIsAdmin] = useState(false);
   const [editingPost, setEditingPost] = useState<Post | null | undefined>(undefined);
 
@@ -535,7 +542,7 @@ const App: React.FC<AppProps> = ({ routeSlug }) => {
             {/* Filter Bar */}
             <div className="sticky top-[65px] md:top-[73px] z-40 bg-[#050505]/95 backdrop-blur-md border-b border-zinc-800 overflow-x-hidden">
               <div className="max-w-7xl mx-auto px-4 md:px-6 py-4 flex overflow-x-auto no-scrollbar gap-6 md:gap-8">
-                {(['All', 'Books & Comics', 'Games', 'Movies'] as Category[]).map((cat) => (
+                {(['All', 'Books & Comics', 'Games', 'Movies'] as CategoryFilter[]).map((cat) => (
                   <button
                     key={cat}
                     onClick={() => setActiveCategory(cat)}

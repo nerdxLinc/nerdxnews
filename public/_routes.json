@@ -3,7 +3,9 @@
   "include": [
     "/posts*",
     "/upload-image*",
-    "/health*"
+    "/health*",
+    "/og-image*",
+    "/articles/*"
   ],
   "exclude": [
     "/assets/*",

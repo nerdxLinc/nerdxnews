@@ -77,6 +77,14 @@ function isProbablyUrl(v: string): boolean {
 const MenuBar = ({ editor }: { editor: any }) => {
   if (!editor) return null;
 
+  const getImageFloat = () => {
+    if (!editor.isActive('image')) return null;
+    const attrs = editor.getAttributes('image');
+    return attrs['data-float'] || 'none';
+  };
+
+  const currentFloat = getImageFloat();
+
   const addImage = useCallback(() => {
     const url = window.prompt("Enter image URL:");
     if (url) {
@@ -209,7 +217,7 @@ const MenuBar = ({ editor }: { editor: any }) => {
       <button
         type="button"
         onClick={() => setImageFloat("left")}
-        className="px-2 py-1 text-[10px] rounded bg-zinc-800 text-zinc-300 hover:bg-zinc-700"
+        className={`px-2 py-1 text-[10px] rounded ${currentFloat === 'left' ? 'bg-orange-600 text-white' : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'}`}
         title="Float image left (text wraps right)"
       >
         ← Left
@@ -217,7 +225,7 @@ const MenuBar = ({ editor }: { editor: any }) => {
       <button
         type="button"
         onClick={() => setImageFloat("none")}
-        className="px-2 py-1 text-[10px] rounded bg-zinc-800 text-zinc-300 hover:bg-zinc-700"
+        className={`px-2 py-1 text-[10px] rounded ${currentFloat === 'none' ? 'bg-orange-600 text-white' : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'}`}
         title="Center image (no text wrap)"
       >
         Center
@@ -225,7 +233,7 @@ const MenuBar = ({ editor }: { editor: any }) => {
       <button
         type="button"
         onClick={() => setImageFloat("right")}
-        className="px-2 py-1 text-[10px] rounded bg-zinc-800 text-zinc-300 hover:bg-zinc-700"
+        className={`px-2 py-1 text-[10px] rounded ${currentFloat === 'right' ? 'bg-orange-600 text-white' : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'}`}
         title="Float image right (text wraps left)"
       >
         Right →
