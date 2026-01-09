@@ -5,6 +5,7 @@ interface PostCardProps {
   post: Post;
   onClick: (post: Post) => void;
   onEdit?: (post: Post) => void;
+  onDelete?: (post: Post) => void;
   isAdmin: boolean;
 }
 
@@ -56,7 +57,7 @@ const pickCategory = (p: any): string => {
   return String(p?.category ?? p?.section ?? '').trim();
 };
 
-const PostCard: React.FC<PostCardProps> = ({ post, onClick, onEdit, isAdmin }) => {
+const PostCard: React.FC<PostCardProps> = ({ post, onClick, onEdit, onDelete, isAdmin }) => {
   const imgSrc = useMemo(() => pickImage(post as any), [post]);
   const excerpt = useMemo(() => pickExcerpt(post as any), [post]);
   const author = useMemo(() => pickAuthor(post as any), [post]);
@@ -121,16 +122,33 @@ const PostCard: React.FC<PostCardProps> = ({ post, onClick, onEdit, isAdmin }) =
             </span>
           </div>
 
-          {isAdmin && onEdit ? (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onEdit(post);
-              }}
-              className="px-4 py-2 bg-orange-600 text-white text-[10px] font-black uppercase tracking-widest hover:bg-orange-500 transition-colors"
-            >
-              EDIT INTEL
-            </button>
+          {isAdmin ? (
+            <div className="flex gap-2">
+              {onEdit && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onEdit(post);
+                  }}
+                  className="px-3 py-2 bg-orange-600 text-white text-[10px] font-black uppercase tracking-widest hover:bg-orange-500 transition-colors"
+                >
+                  EDIT
+                </button>
+              )}
+              {onDelete && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (window.confirm(`Delete "${post.title}"? This cannot be undone.`)) {
+                      onDelete(post);
+                    }
+                  }}
+                  className="px-3 py-2 bg-red-700 text-white text-[10px] font-black uppercase tracking-widest hover:bg-red-600 transition-colors"
+                >
+                  DELETE
+                </button>
+              )}
+            </div>
           ) : (
             <div className="flex flex-col items-end">
               <span className="text-[10px] text-zinc-600 font-black uppercase tracking-widest">

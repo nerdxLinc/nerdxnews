@@ -139,5 +139,20 @@ export const onRequest = async (context: { request: Request; env: Env }) => {
     }
   }
 
+  if (request.method === "DELETE") {
+    try {
+      const body = await request.json();
+      const slug = s(body?.slug);
+      
+      if (!slug) return json({ error: "Missing slug" }, 400);
+      
+      await env.DB.prepare("DELETE FROM posts WHERE slug = ?").bind(slug).run();
+      
+      return json({ ok: true }, 200);
+    } catch (e) {
+      return json({ error: String((e as any)?.message ?? e) }, 500);
+    }
+  }
+
   return new Response("Method Not Allowed", { status: 405 });
 };

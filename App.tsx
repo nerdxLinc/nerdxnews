@@ -128,6 +128,23 @@ async function postToServer(payload: any): Promise<{ success: boolean; slug?: st
   }
 }
 
+async function deletePostFromServer(slug: string): Promise<{ ok: boolean }> {
+  const res = await fetch('/posts', {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ slug }),
+  });
+
+  const text = await res.text().catch(() => '');
+  if (!res.ok) throw new Error(text || `Delete failed (${res.status})`);
+
+  try {
+    return JSON.parse(text);
+  } catch {
+    return { ok: true };
+  }
+}
+
 const App: React.FC<AppProps> = ({ routeSlug }) => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -394,6 +411,30 @@ const App: React.FC<AppProps> = ({ routeSlug }) => {
     }
   };
 
+  const handleDeletePost = async (post: Post) => {
+    const postSlug = (post as any).slug || slugify(post.title);
+    
+    try {
+      await deletePostFromServer(postSlug);
+      
+      setPosts((prev) => prev.filter((p) => {
+        const pSlug = (p as any).slug || slugify(p.title);
+        return pSlug !== postSlug;
+      }));
+      
+      if (selectedPost) {
+        const selectedSlug = (selectedPost as any).slug || slugify(selectedPost.title);
+        if (selectedSlug === postSlug) {
+          setSelectedPost(null);
+          navigate('/');
+        }
+      }
+    } catch (e) {
+      console.error('Delete error:', e);
+      alert(`Delete failed: ${e instanceof Error ? e.message : 'Unknown error'}`);
+    }
+  };
+
   const onHome = () => {
     setSelectedPost(null);
     setActiveCategory('All');
@@ -516,6 +557,7 @@ const App: React.FC<AppProps> = ({ routeSlug }) => {
                     post={post}
                     onClick={() => goToPost(post)}
                     onEdit={isAdmin ? () => setEditingPost(post) : undefined}
+                    onDelete={isAdmin ? handleDeletePost : undefined}
                     isAdmin={isAdmin}
                   />
                 ))}

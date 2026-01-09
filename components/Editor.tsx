@@ -220,6 +220,23 @@ const MenuBar = ({ editor }: { editor: any }) => {
       >
         Right →
       </button>
+
+      <div className="w-px h-6 bg-zinc-700 mx-1 self-center" />
+
+      <button
+        type="button"
+        onClick={() => {
+          if (editor.isActive('image') || editor.isActive('youtube')) {
+            editor.chain().focus().deleteSelection().run();
+          } else {
+            alert('Select an image or video first, then click delete.');
+          }
+        }}
+        className="px-2 py-1 text-[10px] rounded bg-red-700 text-white hover:bg-red-600"
+        title="Delete selected image or video"
+      >
+        Delete Selected
+      </button>
     </div>
   );
 };
