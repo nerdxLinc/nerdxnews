@@ -22,6 +22,16 @@ const CustomImage = Image.extend({
           return { 'data-float': attributes['data-float'] };
         },
       },
+      width: {
+        default: null,
+        parseHTML: element => element.getAttribute('width') || element.style.width?.replace('px', ''),
+        renderHTML: attributes => {
+          if (!attributes.width) {
+            return {};
+          }
+          return { width: attributes.width, style: `width: ${attributes.width}px` };
+        },
+      },
     };
   },
 });
@@ -236,6 +246,41 @@ const MenuBar = ({ editor }: { editor: any }) => {
         title="Delete selected image or video"
       >
         Delete Selected
+      </button>
+
+      <div className="w-px h-6 bg-zinc-700 mx-1 self-center" />
+
+      <span className="text-[10px] text-zinc-500 self-center mr-1">Width:</span>
+      <input
+        type="number"
+        min="100"
+        max="1200"
+        step="50"
+        placeholder="px"
+        className="w-16 px-2 py-1 text-[10px] rounded bg-zinc-800 text-zinc-300 border border-zinc-700"
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            const val = parseInt((e.target as HTMLInputElement).value);
+            if (val && val >= 100 && val <= 1200) {
+              editor.chain().focus().updateAttributes('image', { width: val }).run();
+            }
+          }
+        }}
+        title="Set image width (100-1200px), press Enter"
+      />
+      <button
+        type="button"
+        onClick={() => {
+          const input = document.querySelector('input[type="number"][placeholder="px"]') as HTMLInputElement;
+          const val = parseInt(input?.value || '400');
+          if (val && val >= 100 && val <= 1200) {
+            editor.chain().focus().updateAttributes('image', { width: val }).run();
+          }
+        }}
+        className="px-2 py-1 text-[10px] rounded bg-zinc-800 text-zinc-300 hover:bg-zinc-700"
+        title="Apply width to selected image"
+      >
+        Apply
       </button>
     </div>
   );
@@ -535,12 +580,56 @@ const Editor: React.FC<EditorProps> = ({ post, onSave, onClose }) => {
               Article Content
             </div>
             <div className="bg-black border border-zinc-800 rounded-lg overflow-hidden">
+              <style>{`
+                .ProseMirror img[data-float="left"] {
+                  float: left;
+                  margin: 0 1.5rem 1rem 0;
+                  max-width: 50%;
+                }
+                .ProseMirror img[data-float="right"] {
+                  float: right;
+                  margin: 0 0 1rem 1.5rem;
+                  max-width: 50%;
+                }
+                .ProseMirror img {
+                  cursor: pointer;
+                  border: 2px solid transparent;
+                  transition: border-color 0.2s;
+                }
+                .ProseMirror img.ProseMirror-selectednode {
+                  border-color: #f97316;
+                  outline: none;
+                }
+                .ProseMirror p {
+                  clear: none;
+                }
+                .ProseMirror::after {
+                  content: "";
+                  display: table;
+                  clear: both;
+                }
+              `}</style>
               <MenuBar editor={editor} />
               <EditorContent editor={editor} />
             </div>
             <div className="mt-2 text-[10px] text-zinc-600">
-              Tip: For inline images, recommended size is 400-500px wide for left/right float (text wrap), or 1200px for full-width.
+              Tip: For inline images, recommended size is 400-500px wide for left/right float (text wrap), or 1200px for full-width. Click an image to select it, then use Width controls to resize.
             </div>
+          </div>
+
+          <div className="flex justify-end gap-2 mt-6 pt-6 border-t border-zinc-800">
+            <button
+              onClick={onClose}
+              className="bg-zinc-900 border border-zinc-800 text-zinc-200 px-6 py-3 text-xs font-black uppercase tracking-widest rounded"
+            >
+              Close
+            </button>
+            <button
+              onClick={onSubmit}
+              className="bg-orange-600 text-black px-6 py-3 text-xs font-black uppercase tracking-widest rounded"
+            >
+              Publish
+            </button>
           </div>
         </div>
       </div>
