@@ -75,6 +75,8 @@ function isProbablyUrl(v: string): boolean {
 }
 
 const MenuBar = ({ editor }: { editor: any }) => {
+  const [widthValue, setWidthValue] = React.useState('');
+  
   if (!editor) return null;
 
   const getImageFloat = () => {
@@ -83,7 +85,21 @@ const MenuBar = ({ editor }: { editor: any }) => {
     return attrs['data-float'] || 'none';
   };
 
+  const getImageWidth = () => {
+    if (!editor.isActive('image')) return '';
+    const attrs = editor.getAttributes('image');
+    return attrs.width || '';
+  };
+
   const currentFloat = getImageFloat();
+  const currentWidth = getImageWidth();
+  
+  React.useEffect(() => {
+    if (editor.isActive('image')) {
+      const w = getImageWidth();
+      setWidthValue(w ? String(w) : '');
+    }
+  }, [editor.state.selection]);
 
   const addImage = useCallback(() => {
     const url = window.prompt("Enter image URL:");
@@ -264,32 +280,38 @@ const MenuBar = ({ editor }: { editor: any }) => {
         min="100"
         max="1200"
         step="50"
-        placeholder="px"
-        className="w-16 px-2 py-1 text-[10px] rounded bg-zinc-800 text-zinc-300 border border-zinc-700"
+        value={widthValue}
+        onChange={(e) => setWidthValue(e.target.value)}
+        placeholder={currentWidth ? String(currentWidth) : 'px'}
+        className={`w-20 px-2 py-1 text-[10px] rounded border ${editor.isActive('image') ? 'bg-zinc-800 text-white border-orange-600' : 'bg-zinc-900 text-zinc-500 border-zinc-700'}`}
         onKeyDown={(e) => {
           if (e.key === 'Enter') {
-            const val = parseInt((e.target as HTMLInputElement).value);
-            if (val && val >= 100 && val <= 1200) {
+            e.preventDefault();
+            const val = parseInt(widthValue);
+            if (val && val >= 100 && val <= 1200 && editor.isActive('image')) {
               editor.chain().focus().updateAttributes('image', { width: val }).run();
             }
           }
         }}
-        title="Set image width (100-1200px), press Enter"
+        title="Set image width (100-1200px)"
+        disabled={!editor.isActive('image')}
       />
       <button
         type="button"
         onClick={() => {
-          const input = document.querySelector('input[type="number"][placeholder="px"]') as HTMLInputElement;
-          const val = parseInt(input?.value || '400');
-          if (val && val >= 100 && val <= 1200) {
+          const val = parseInt(widthValue);
+          if (val && val >= 100 && val <= 1200 && editor.isActive('image')) {
             editor.chain().focus().updateAttributes('image', { width: val }).run();
+          } else if (!editor.isActive('image')) {
+            alert('Click on an image first to select it, then set the width.');
           }
         }}
-        className="px-2 py-1 text-[10px] rounded bg-zinc-800 text-zinc-300 hover:bg-zinc-700"
+        className={`px-2 py-1 text-[10px] rounded ${editor.isActive('image') ? 'bg-orange-600 text-white hover:bg-orange-500' : 'bg-zinc-800 text-zinc-500'}`}
         title="Apply width to selected image"
       >
         Apply
       </button>
+      {currentWidth && <span className="text-[10px] text-zinc-400 self-center ml-1">({currentWidth}px)</span>}
     </div>
   );
 };
