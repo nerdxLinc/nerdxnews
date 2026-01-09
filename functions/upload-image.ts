@@ -48,7 +48,7 @@ export const onRequestPost = async (context: Context) => {
       },
     });
 
-    const base = String(env.IMAGE_BASE_URL || "https://images.nerdxnews.com").replace(/\/+$/, "");
+    const base = String(env.IMAGE_BASE_URL || "https://images.nerdxnews.com").trim().replace(/\/+$/, "");
     const publicUrl = `${base}/${key}`;
 
     return new Response(JSON.stringify({ url: publicUrl }), {

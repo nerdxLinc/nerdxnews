@@ -44,7 +44,8 @@ export const onRequestGet = async (context: { request: Request; env: Env; params
 function generateOgHtml(post: Post): Response {
   const title = escapeHtml(post.title || 'NerdXNews');
   const description = escapeHtml(post.excerpt || 'The Evolution of Nerd Culture');
-  const image = post.imageUrl || 'https://nerdxnews.com/NerdXNews_Logo.png';
+  const rawImage = (post.imageUrl || 'https://nerdxnews.com/NerdXNews_Logo.png').trim().replace(/\s+/g, '');
+  const image = rawImage.startsWith('http') ? rawImage : `https://nerdxnews.com${rawImage.startsWith('/') ? '' : '/'}${rawImage}`;
   const url = `https://nerdxnews.com/articles/${post.slug}`;
 
   const html = `<!DOCTYPE html>
