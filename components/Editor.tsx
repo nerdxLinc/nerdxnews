@@ -154,6 +154,7 @@ const Editor: React.FC<EditorProps> = ({ post, onSave, onClose }) => {
               onChange={(e) => setTitle(e.target.value)}
               className="w-full bg-black border border-zinc-800 px-3 py-3 text-white outline-none"
               placeholder="Enter title..."
+              autoComplete="off"
             />
           </div>
 
@@ -166,6 +167,7 @@ const Editor: React.FC<EditorProps> = ({ post, onSave, onClose }) => {
               onChange={(e) => setSlug(e.target.value)}
               className="w-full bg-black border border-zinc-800 px-3 py-3 text-white outline-none font-mono text-sm"
               placeholder={derivedSlug || "auto-generated-from-title"}
+              autoComplete="off"
             />
           </div>
 
@@ -178,6 +180,7 @@ const Editor: React.FC<EditorProps> = ({ post, onSave, onClose }) => {
               onChange={(e) => setDate(e.target.value)}
               className="w-full bg-black border border-zinc-800 px-3 py-3 text-white outline-none font-mono text-sm"
               placeholder="YYYY-MM-DD"
+              autoComplete="off"
             />
           </div>
 
@@ -224,6 +227,7 @@ const Editor: React.FC<EditorProps> = ({ post, onSave, onClose }) => {
               onChange={(e) => setImageUrl(e.target.value)}
               className="w-full bg-black border border-zinc-800 px-3 py-2 text-white outline-none font-mono text-xs"
               placeholder="Paste image URL here (https://images.nerdxnews.com/...) or upload below"
+              autoComplete="off"
             />
 
             <label className="inline-block mt-2">
