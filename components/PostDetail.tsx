@@ -5,6 +5,7 @@ type Props = {
   post: Post;
   onBack: () => void;
   isAdmin?: boolean;
+  onEdit?: (post: Post) => void;
 };
 
 const normalizeImagePath = (src?: string) => {
@@ -14,7 +15,6 @@ const normalizeImagePath = (src?: string) => {
   return `/images/${src}`;
 };
 
-// Legacy-tolerant field pickers (keeps PostDetail resilient to older JSON shapes)
 const pickExcerpt = (p: any): string => {
   return String(
     p?.excerpt ??
@@ -55,7 +55,17 @@ const pickSlug = (p: any): string => {
   return String(p?.slug ?? p?.path ?? p?.permalink ?? '').trim();
 };
 
-const PostDetail: React.FC<Props> = ({ post, onBack, isAdmin }) => {
+const isHtmlContent = (content: string): boolean => {
+  return content.trim().startsWith('<') && (
+    content.includes('</p>') || 
+    content.includes('</div>') || 
+    content.includes('</h') ||
+    content.includes('<img') ||
+    content.includes('<iframe')
+  );
+};
+
+const PostDetail: React.FC<Props> = ({ post, onBack, isAdmin, onEdit }) => {
   const [copied, setCopied] = useState(false);
 
   const heroImage = useMemo(() => {
@@ -73,8 +83,12 @@ const PostDetail: React.FC<Props> = ({ post, onBack, isAdmin }) => {
   const metaDate = useMemo(() => pickDate(post as any), [post]);
   const metaCategory = useMemo(() => pickCategory(post as any), [post]);
 
+  const content = useMemo(() => pickContent(post as any), [post]);
+  const isHtml = useMemo(() => isHtmlContent(content), [content]);
+
   const paragraphs = useMemo(() => {
-    const raw = pickContent(post as any);
+    if (isHtml) return [];
+    const raw = content;
     if (!raw || typeof raw !== 'string') return [];
 
     return raw
@@ -83,7 +97,7 @@ const PostDetail: React.FC<Props> = ({ post, onBack, isAdmin }) => {
       .split(/\n{2,}/g)
       .map((p) => p.trim())
       .filter(Boolean);
-  }, [post]);
+  }, [content, isHtml]);
 
   const shareUrl = useMemo(() => {
     if (typeof window === 'undefined') return '';
@@ -98,7 +112,6 @@ const PostDetail: React.FC<Props> = ({ post, onBack, isAdmin }) => {
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1200);
     } catch {
-      // fallback
       const ta = document.createElement('textarea');
       ta.value = shareUrl;
       document.body.appendChild(ta);
@@ -120,16 +133,123 @@ const PostDetail: React.FC<Props> = ({ post, onBack, isAdmin }) => {
           url: shareUrl,
         });
         return;
-      } catch {
-        // user canceled or blocked — fall through to copy
-      }
+      } catch {}
     }
     await copyLink();
   };
 
   return (
     <article className="min-h-[calc(100vh-140px)] bg-[#050505] text-white">
-      {/* Top bar */}
+      <style>{`
+        .article-content {
+          color: #e4e4e7;
+          font-size: 1.125rem;
+          line-height: 1.75;
+        }
+        .article-content p {
+          margin-bottom: 1.5rem;
+        }
+        .article-content h2 {
+          font-size: 1.75rem;
+          font-weight: 800;
+          margin-top: 2.5rem;
+          margin-bottom: 1rem;
+          color: white;
+          text-transform: uppercase;
+          font-style: italic;
+        }
+        .article-content h3 {
+          font-size: 1.25rem;
+          font-weight: 700;
+          margin-top: 2rem;
+          margin-bottom: 0.75rem;
+          color: white;
+        }
+        .article-content ul, .article-content ol {
+          margin-bottom: 1.5rem;
+          padding-left: 1.5rem;
+        }
+        .article-content li {
+          margin-bottom: 0.5rem;
+        }
+        .article-content blockquote {
+          border-left: 4px solid #ea580c;
+          padding-left: 1.5rem;
+          margin: 1.5rem 0;
+          font-style: italic;
+          color: #a1a1aa;
+        }
+        .article-content a {
+          color: #ea580c;
+          text-decoration: underline;
+        }
+        .article-content a:hover {
+          color: #facc15;
+        }
+        .article-content strong {
+          color: white;
+          font-weight: 600;
+        }
+        .article-content img {
+          max-width: 100%;
+          height: auto;
+          border-radius: 0.5rem;
+          margin: 1.5rem 0;
+        }
+        .article-content img[data-float="left"] {
+          float: left;
+          max-width: 45%;
+          margin: 0.5rem 1.5rem 1rem 0;
+        }
+        .article-content img[data-float="right"] {
+          float: right;
+          max-width: 45%;
+          margin: 0.5rem 0 1rem 1.5rem;
+        }
+        .article-content .editor-image {
+          max-width: 100%;
+          height: auto;
+          border-radius: 0.5rem;
+          margin: 1.5rem 0;
+        }
+        .article-content .editor-image[data-float="left"] {
+          float: left;
+          max-width: 45%;
+          margin: 0.5rem 1.5rem 1rem 0;
+        }
+        .article-content .editor-image[data-float="right"] {
+          float: right;
+          max-width: 45%;
+          margin: 0.5rem 0 1rem 1.5rem;
+        }
+        .article-content iframe,
+        .article-content .editor-youtube {
+          max-width: 100%;
+          margin: 2rem auto;
+          display: block;
+          border-radius: 0.5rem;
+          aspect-ratio: 16/9;
+          width: 100%;
+          height: auto;
+          min-height: 360px;
+        }
+        .article-content::after {
+          content: "";
+          display: table;
+          clear: both;
+        }
+        @media (max-width: 640px) {
+          .article-content img[data-float="left"],
+          .article-content img[data-float="right"],
+          .article-content .editor-image[data-float="left"],
+          .article-content .editor-image[data-float="right"] {
+            float: none;
+            max-width: 100%;
+            margin: 1rem 0;
+          }
+        }
+      `}</style>
+
       <div className="max-w-6xl mx-auto px-4 md:px-6 pt-6 md:pt-10">
         <div className="flex items-center justify-between gap-4">
           <button
@@ -141,6 +261,15 @@ const PostDetail: React.FC<Props> = ({ post, onBack, isAdmin }) => {
           </button>
 
           <div className="flex items-center gap-2 md:gap-3">
+            {isAdmin && onEdit && (
+              <button
+                type="button"
+                onClick={() => onEdit(post)}
+                className="inline-flex items-center justify-center px-3 py-2 md:px-4 md:py-2 text-[10px] md:text-[11px] font-black uppercase tracking-[0.2em] bg-orange-600 text-white hover:bg-orange-500 transition-colors"
+              >
+                Edit
+              </button>
+            )}
             <button
               type="button"
               onClick={copyLink}
@@ -168,7 +297,6 @@ const PostDetail: React.FC<Props> = ({ post, onBack, isAdmin }) => {
         </div>
       </div>
 
-      {/* Hero image (optional) */}
       {heroImage && (
         <div className="relative mt-6 md:mt-8">
           <div className="max-w-6xl mx-auto px-4 md:px-6">
@@ -187,7 +315,6 @@ const PostDetail: React.FC<Props> = ({ post, onBack, isAdmin }) => {
         </div>
       )}
 
-      {/* Title + meta */}
       <div className="max-w-3xl mx-auto px-4 md:px-6 pt-8 md:pt-12">
         <div className="flex items-center gap-3 mb-4">
           <span className="px-3 py-1 bg-orange-600/90 text-white text-[9px] font-black tracking-[0.2em] uppercase">
@@ -218,9 +345,13 @@ const PostDetail: React.FC<Props> = ({ post, onBack, isAdmin }) => {
         )}
       </div>
 
-      {/* Body */}
       <div className="max-w-3xl mx-auto px-4 md:px-6 pb-16 md:pb-24 pt-10">
-        {paragraphs.length > 0 ? (
+        {isHtml ? (
+          <div 
+            className="article-content"
+            dangerouslySetInnerHTML={{ __html: content }}
+          />
+        ) : paragraphs.length > 0 ? (
           <div className="space-y-6 text-zinc-200 text-base md:text-lg leading-relaxed">
             {paragraphs.map((p, idx) => (
               <p key={idx} className="whitespace-pre-wrap">
