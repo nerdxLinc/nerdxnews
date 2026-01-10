@@ -238,6 +238,23 @@ const PostDetail: React.FC<Props> = ({ post, onBack, isAdmin, onEdit }) => {
           display: table;
           clear: both;
         }
+        .article-content-light {
+          color: #1f1f1f;
+        }
+        .article-content-light h2,
+        .article-content-light h3,
+        .article-content-light strong {
+          color: #0a0a0a;
+        }
+        .article-content-light blockquote {
+          color: #525252;
+        }
+        .article-content-light a {
+          color: #c2410c;
+        }
+        .article-content-light a:hover {
+          color: #ea580c;
+        }
         @media (max-width: 640px) {
           .article-content img[data-float="left"],
           .article-content img[data-float="right"],
@@ -346,25 +363,27 @@ const PostDetail: React.FC<Props> = ({ post, onBack, isAdmin, onEdit }) => {
       </div>
 
       <div className="max-w-3xl mx-auto px-4 md:px-6 pb-16 md:pb-24 pt-10">
-        {isHtml ? (
-          <div 
-            className="article-content"
-            dangerouslySetInnerHTML={{ __html: content }}
-          />
-        ) : paragraphs.length > 0 ? (
-          <div className="space-y-6 text-zinc-200 text-base md:text-lg leading-relaxed">
-            {paragraphs.map((p, idx) => (
-              <p key={idx} className="whitespace-pre-wrap">
-                {p}
-              </p>
-            ))}
-          </div>
-        ) : (
-          <p className="text-zinc-500 text-sm font-mono">
-            No article body found. (The post has no recognized body field like{' '}
-            <code>content</code>, <code>body</code>, or <code>story</code>.)
-          </p>
-        )}
+        <div className="bg-zinc-200 rounded-lg p-6 md:p-10">
+          {isHtml ? (
+            <div 
+              className="article-content article-content-light"
+              dangerouslySetInnerHTML={{ __html: content }}
+            />
+          ) : paragraphs.length > 0 ? (
+            <div className="space-y-6 text-zinc-800 text-base md:text-lg leading-relaxed">
+              {paragraphs.map((p, idx) => (
+                <p key={idx} className="whitespace-pre-wrap">
+                  {p}
+                </p>
+              ))}
+            </div>
+          ) : (
+            <p className="text-zinc-500 text-sm font-mono">
+              No article body found. (The post has no recognized body field like{' '}
+              <code>content</code>, <code>body</code>, or <code>story</code>.)
+            </p>
+          )}
+        </div>
       </div>
     </article>
   );
